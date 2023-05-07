@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.20)
+project(demo C)
+
+set(CMAKE_C_STANDARD 99)
+
+add_executable(demo main.c store.c segmentation.c)
+add_executable(file file.c time_utils.c)
+add_executable(server server.c)
+add_executable(client client.c)
+add_executable(signal signal.c time_utils.c)
