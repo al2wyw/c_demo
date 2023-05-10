@@ -8,10 +8,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <setjmp.h>
 
 void get_format_time_ms(char *str_time);
 
 int flag = 1;
+jmp_buf env;
+
+long getThreadId() {
+    pthread_t cur = pthread_self();
+    return cur->__sig;
+}
 
 void process_exit(int sig)
 {
@@ -56,12 +63,18 @@ void signal_type()
 
 void signal_sigill()
 {
-    fprintf(stdout, "caught SIGILL signal\n");
+    fprintf(stdout, "caught SIGILL signal %lu\n", getThreadId());
 }
 
 void signal_sigterm()
 {
-    fprintf(stdout, "caught SIGTERM signal\n");
+    fprintf(stdout, "caught SIGTERM signal %lu\n", getThreadId());
+}
+
+void signal_sigsegv()
+{
+    fprintf(stdout, "caught SIGSEGV signal %lu\n", getThreadId());
+    siglongjmp(env,1);//try catch 的原型
 }
 
 
@@ -98,17 +111,27 @@ int test_signal_SIGFPE()
 }
 
 void *run() {
-    pthread_t cur = pthread_self();
-    printf("start to trigger SIGSEGV in few seconds %lu\n", cur->__sig);
-    sleep(7);
-    int a[3] = {0};
-    fprintf(stdout, "a[3] = %d\n", a[-1111111]);//trigger SIGSEGV
+    int r = sigsetjmp(env,1);
+    if (r == 0) {
+        printf("start to trigger SIGSEGV in few seconds %lu\n", getThreadId());
+        sleep(7);
+        int a[3] = {0};
+        fprintf(stdout, "a[3] = %d\n", a[-1111111]);//trigger SIGSEGV
+    } else {
+        printf("recover from SIGSEGV %lu\n", getThreadId());
+        run();
+    }
     return NULL;
 }
 
 int test_signal_SIGSEGV()
 {
-    signal_type();
+    //signal_type();
+    if (signal(SIGSEGV, signal_sigsegv) == SIG_ERR) {
+        fprintf(stdout, "cannot handle SIGTERM\n");
+    } else {
+        fprintf(stdout, "xxxxx\n");
+    }
     pthread_t thrd1;
     if (pthread_create(&thrd1, NULL, run, NULL) != 0)
     {
@@ -116,7 +139,6 @@ int test_signal_SIGSEGV()
         return 1;
     }
     pthread_detach(thrd1);
-    //run();
     return 0;
 }
 
@@ -147,18 +169,18 @@ void wait_signal()
     while (flag) {
         char timeStamp[32];
         get_format_time_ms(timeStamp);
-        fprintf(stdout, "%s, please press to exit\n", timeStamp);
+        fprintf(stdout, "%s, please press to exit %lu\n", timeStamp, getThreadId());
         unsigned int ret = sleep(3);
         if (ret != 0) {
             get_format_time_ms(timeStamp);
-            printf("%s, sleep error:%s %d\n", timeStamp, strerror(errno), ret);
+            printf("%s, sleep error:%s %d %lu\n", timeStamp, strerror(errno), ret, getThreadId());
         }
     }
 }
 
 int main()
 {
-    test_signal_SIGINT();
+    test_signal_SIGSEGV();
     wait_signal();
 
     return(0);
