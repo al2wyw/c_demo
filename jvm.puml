@@ -1,0 +1,59 @@
+@startuml
+class ArrayList {
+Object[] elementData
+int size()
+}
+
+CppInterpreterGenerator ..|> AbstractInterpreterGenerator
+TemplateInterpreterGenerator ..|> AbstractInterpreterGenerator
+InterpreterGenerator ..|> CppInterpreterGenerator
+note on link: define CC_INTERP_ONLY
+InterpreterGenerator ..|> TemplateInterpreterGenerator
+note on link: define NOT_CC_INTERP
+
+CppInterpreter ..|> AbstractInterpreter
+TemplateInterpreter ..|> AbstractInterpreter
+Interpreter ..|> CppInterpreter: /#define CC_INTERP_ONLY
+Interpreter ..|> TemplateInterpreter: /#define NOT_CC_INTERP
+
+
+BytecodeInterpreter ...> InterpreterRuntime
+CppInterpreter ...> BytecodeInterpreter
+TemplateInterpreter ...> InterpreterRuntime
+
+markOopDesc --|> oopDesc
+instanceOopDesc ..|> oopDesc
+arrayOopDesc ..|> oopDesc
+
+note left of markOopDesc
+The markOop describes
+the header of an object
+end note
+
+note left of oopDesc
+oopDesc is the top baseclass
+for objects classes
+end note
+
+note top of instanceOopDesc
+An instanceOop is an instance of a Java Class
+end note
+
+InstanceClassLoaderKlass ..|> InstanceKlass
+InstanceMirrorKlass ..|> InstanceKlass
+InstanceRefKlass ..|> InstanceKlass
+InstanceKlass ..|> Klass
+Klass ..|> Metadata
+Method ..|> Metadata
+Metadata ..|> MetaspaceObj
+
+note as common_note
+  <b>global.h</b>: jvm flag 参数
+
+  <u>also</u> <color:royalBlue>on several</color> <s>words</s> lines
+  Class13 --> Class14
+  Class15 ..> Class16
+  Class17 --|> Class18
+  Class19 *--> Class20
+end note
+@enduml
