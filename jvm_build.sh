@@ -52,15 +52,17 @@ export BUILD_INSTALL=false
 unset JAVA_HOME
 unset CLASSPATH
 # 调试信息时需要的objcopy，加上这个，就不用在configure中添加了
-export OBJCOPY=gobjcopy
+export OBJCOPY=objcopy
 
 # /Users/liyang/Xcode.app/Contents/Developer
 # /Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home
-sh ./configure --with-debug-level=slowdebug  --enable-ccache OBJCOPY=gobjcopy --with-freetype-include=/usr/local/Cellar/freetype/2.13.0_1/include/freetype2 --with-freetype-lib=/usr/local/Cellar/freetype/2.13.0_1/lib/ --with-boot-jdk=/Users/liyang/jdk8/Contents/Home   --enable-debug-symbols
+sh ./configure --with-debug-level=slowdebug  --enable-ccache OBJCOPY=objcopy --with-freetype-include=/usr/local/Cellar/freetype/2.13.0_1/include/freetype2 --with-freetype-lib=/usr/local/Cellar/freetype/2.13.0_1/lib/ --with-boot-jdk=/Users/liyang/jdk8/Contents/Home   --enable-debug-symbols
 
 if [ $? -eq 0 ]; then
   compiledb make CONF=macosx-x86_64-normal-server-slowdebug
 fi
+# https://blog.csdn.net/f80407515/article/details/123926882
+# freetype-2.13.0_1 compiledb-0.10.1 via brew
 # Configuration summary:
 # * Debug level:    slowdebug
 # * JDK variant:    normal
