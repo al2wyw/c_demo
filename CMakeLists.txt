@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.13.2)
 project(demo C)
 
 set(CMAKE_C_STANDARD 99)
@@ -10,3 +10,5 @@ add_executable(client client.c)
 add_executable(signal signal.c time_utils.c)
 add_executable(volatile volatile.c)
 add_executable(non_volatile non_volatile.c)
+add_executable(asm asm.c)
+add_executable(lock_addx lock_addx.c)
