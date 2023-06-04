@@ -7,6 +7,28 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
+//order access
+// loadload loadstore -> acquire
+// storestore -> release
+// storeload -> fence
+void acquire() {
+    volatile int* local_dummy;
+
+    __asm__ volatile ("movq 0(%%rsp), %0" : "=r" (local_dummy) : : "memory");
+}
+
+void release() {
+    // Avoid hitting the same cache-line from
+    // different threads.
+    volatile int local_dummy = 0;
+}
+
+void fence() {
+    // always use locked addl since mfence is sometimes expensive
+    __asm__ volatile ("lock; addl $0,0(%%rsp)" : : : "cc", "memory");
+}
+//order access
+
 #define THREAD_SIZE     10
 
 int inc(int *value, int add) {
