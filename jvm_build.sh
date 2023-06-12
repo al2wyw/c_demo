@@ -58,9 +58,9 @@ export OBJCOPY=objcopy
 # /Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home
 sh ./configure --with-debug-level=slowdebug  --enable-ccache OBJCOPY=objcopy --with-freetype-include=/usr/local/Cellar/freetype/2.13.0_1/include/freetype2 --with-freetype-lib=/usr/local/Cellar/freetype/2.13.0_1/lib/ --with-boot-jdk=/Users/liyang/jdk8/Contents/Home   --enable-debug-symbols
 
-if [ $? -eq 0 ]; then
-  compiledb make CONF=macosx-x86_64-normal-server-slowdebug
-fi
+# 要与configure分开执行
+# compiledb make CONF=macosx-x86_64-normal-server-slowdebug
+
 # https://blog.csdn.net/f80407515/article/details/123926882
 # freetype-2.13.0_1 compiledb-0.10.1 via brew
 # Configuration summary:

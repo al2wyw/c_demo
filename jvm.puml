@@ -21,6 +21,22 @@ BytecodeInterpreter ...> InterpreterRuntime
 CppInterpreter ...> BytecodeInterpreter
 TemplateInterpreter ...> InterpreterRuntime
 
+Thread --|> ThreadShadow
+JavaThread --|> Thread
+NamedThread --|> Thread
+WatcherThread --|> Thread
+
+JavaThread ...> OSThread
+
+
+Parker ..|> PlatformParker
+ParkEvent ..|> PlatformEvent
+note left of PlatformParker
+PlatformParker and PlatformEvent
+has same facility:
+pthread_cond_timedwait & pthread_cond_wait
+end note
+
 markOopDesc --|> oopDesc
 instanceOopDesc ..|> oopDesc
 arrayOopDesc ..|> oopDesc
@@ -46,6 +62,12 @@ InstanceKlass ..|> Klass
 Klass ..|> Metadata
 Method ..|> Metadata
 Metadata ..|> MetaspaceObj
+
+MethodData ..|> Metadata
+ConstMethod ..|> MetaspaceObj
+
+Method ...> MethodData
+Method ...> ConstMethod
 
 note as common_note
   <b>global.h</b>: jvm flag 参数
