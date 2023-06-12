@@ -7,9 +7,9 @@
  * |----------------|
  * | args           | 6个以后的参数，每个参数占64bit，无论大小
  * |----------------| <- rbp + 16 (64bit) / previous rsp (通过rsp设置6个以后的参数)
- * | ret address    |
+ * | ret address    | 由call指令完成
  * |----------------|
- * | previous rbp   |
+ * | previous rbp   | 由callee完成
  * |----------------| <- rbp
  * | saved regs     |
  * |----------------|
