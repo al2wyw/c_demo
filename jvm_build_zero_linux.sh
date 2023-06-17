@@ -92,10 +92,9 @@ fi
 # * C Compiler:     gcc (GCC) 4.8.5 20150623 (Red Hat-44) version 4.8.5-44) (at /usr/bin/gcc)
 # * C++ Compiler:   g++ (GCC) 4.8.5 20150623 (Red Hat-44) version 4.8.5-44) (at /usr/bin/g++)
 #
-# Build performance summary:
-# * Cores to use:   7
-# * Memory limit:   7802 MB
-# * ccache status:  not installed (consider installing)
+# GNU Make 3.82
+# Built for x86_64-redhat-linux-gnu
+
 
 # yum list libXtst-devel libXt-devel libXrender-devel cups-devel freetype-devel alsa-lib-devel binutils libffi-devel
 # alsa-lib-devel.x86_64                                       1.1.8-1.el7                                               @base    
