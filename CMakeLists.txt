@@ -13,3 +13,6 @@ add_executable(non_volatile non_volatile.c)
 add_executable(asm asm.c)
 add_executable(lock_addx lock_addx.c)
 add_executable(frame frame.c)
+add_executable(def def.c)
+
+add_definitions(-DCC_INTR)
