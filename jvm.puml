@@ -70,7 +70,21 @@ Method ...> MethodData
 Method ...> ConstMethod
 
 note as common_note
+  -XX:-UseStackBanging和-XX:-ProfileInterpreter，不生成栈检查和统计相关的汇编代码
   <b>global.h</b>: jvm flag 参数
+  <b>javaCalls.cpp</b>: JavaCalls::call native方法中调用java方法
+  <b>macroAssembler_x86.cpp</b>: MacroAssembler::call_VM java方法中调用native方法 (模板解释器)
+  <b>templateInterpreter_x86_64.cpp</b>: AbstractInterpreterGenerator::generate_method_entry generate_normal_entry generate_native_entry
+  javaCalls.cpp
+  assembler_x86.cpp
+  interp_masm_x86_64.cpp
+  interpreterRuntime.cpp
+  macroAssembler_x86.cpp
+  stubGenerator_x86_64.cpp
+  stubGenerator_zero.cpp
+  stubRoutines.cpp
+  templateInterpreter_x86_64.cpp
+  templateTable_x86_64.cpp
 
   <u>also</u> <color:royalBlue>on several</color> <s>words</s> lines
   Class13 --> Class14
