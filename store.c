@@ -20,6 +20,8 @@ mynode tarnode = {544, "node"};
 mystruct tar = {123, "myvalue", &tarnode};
 
 int64_t mul(int64_t a, int64_t b) {
-    printf("%s\n", mystr);
+    if (val > 1) {
+        printf("%s\n", mystr);
+    }
     return a * b * const_val * val * static_val;
 }

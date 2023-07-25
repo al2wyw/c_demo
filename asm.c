@@ -35,4 +35,5 @@ int main() {
     add();
     int ret = mul(4,6);
     printf("ret %d\n", ret);
+    printf("mul addr %p\n", mul);
 }

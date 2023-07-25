@@ -10,25 +10,27 @@ _mul:                                   ## @mul
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	subq	$32, %rsp
+	subq	$16, %rsp
 	movq	%rdi, -8(%rbp)
 	movq	%rsi, -16(%rbp)
+	cmpl	$1, _val(%rip)
+	jle	LBB0_2
+## %bb.1:
 	movq	_mystr(%rip), %rsi
 	leaq	L_.str.3(%rip), %rdi
 	movb	$0, %al
 	callq	_printf
 	movslq  _val(%rip), %rdi
     call    _print
-	movq	-8(%rbp), %rcx
-	imulq	-16(%rbp), %rcx
-	shlq	$0, %rcx
-	movslq	_val(%rip), %rdx
-	imulq	%rdx, %rcx
-	movslq	_static_val(%rip), %rdx
-	imulq	%rdx, %rcx
-	movl	%eax, -20(%rbp)                 ## 4-byte Spill
-	movq	%rcx, %rax
-	addq	$32, %rsp
+LBB0_2:
+	movq	-8(%rbp), %rax
+	imulq	-16(%rbp), %rax
+	shlq	$0, %rax
+	movslq	_val(%rip), %rcx
+	imulq	%rcx, %rax
+	movslq	_static_val(%rip), %rcx
+	imulq	%rcx, %rax
+	addq	$16, %rsp
 	popq	%rbp
 	retq
 	.cfi_endproc
