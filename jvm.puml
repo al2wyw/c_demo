@@ -75,24 +75,38 @@ note as common_note
   <b>global.h</b>: jvm flag 参数
   <b>javaCalls.cpp</b>: JavaCalls::call native方法中调用java方法
   <b>macroAssembler_x86.cpp</b>: MacroAssembler::call_VM 生成 模板解释器执行指令时(即java方法)调用native方法(interpreterRuntime的方法) 的例程的汇编代码
-  <b>templateInterpreter_x86_64.cpp</b>: AbstractInterpreterGenerator::generate_method_entry generate_normal_entry generate_native_entry
+  <b>templateInterpreter_x86_64.cpp</b>: AbstractInterpreterGenerator::generate_method_entry generate_normal_entry generate_native_entry 生成java/native解释执行的入口
+  <b>sharedRuntime_x86_64.cpp</b>: SharedRuntime::generate_native_wrapper 生成native编译执行的入口:
+  InterpreterGenerator::generate_normal_entry ->
+  	return address of asm code				(templateInterpreter)
+  	return CppInterpreter::normal_entry     (zero)
+
+  InterpreterGenerator::generate_native_entry ->
+  	return address of asm code				(templateInterpreter)
+  	return CppInterpreter::native_entry     (zero)
+
   assembler_x86.cpp
+  globalDefinitions.hpp
   globals.hpp
   interp_masm_x86_64.cpp
   interpreterRuntime.cpp
   javaCalls.cpp
+  jni.cpp
+  jvm.cpp
   library_call.cpp
   macroAssembler_x86.cpp
   method.cpp
   nmethod.cpp
   sharedRuntime_x86_64.cpp
   stubGenerator_x86_64.cpp
-  stubGenerator_zero.cpp
   stubRoutines.cpp
   systemDictionary.cpp
   templateInterpreter_x86_64.cpp
   templateTable_x86_64.cpp
   x86_64.ad
+
+  cppInterpreter_zero.cpp
+  stubGenerator_zero.cpp
 
   <u>also</u> <color:royalBlue>on several</color> <s>words</s> lines
   Class13 --> Class14
