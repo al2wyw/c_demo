@@ -61,7 +61,7 @@ sleep 3
 
 # compiledb denpands on clang env
 if [ $? -eq 0 ]; then
-  make CONF=linux-x86_64-normal-server-slowdebug
+  compiledb make CONF=linux-x86_64-normal-server-slowdebug
 fi
 
 # https://blog.csdn.net/tjiyu/article/details/53725247

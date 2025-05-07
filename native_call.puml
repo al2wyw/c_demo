@@ -1,0 +1,42 @@
+@startuml
+
+actor User
+participant "Thread.c" as jThread
+participant "jvm.cpp" as jvm
+participant "thread.cpp" as thread
+participant "os.cpp" as os
+participant "os_linux.cpp" as os_linux
+
+User -> jThread: start0
+activate jThread
+
+jThread -> jvm: JVM_StartThread
+activate jvm
+
+jvm -> thread: Thread::start
+activate thread
+
+thread -> os: os::start_thread
+activate os
+
+os -> os_linux: os::pd_start_thread
+activate os_linux
+os_linux --> os: WorkDone
+deactivate os_linux
+
+os --> thread: WorkDone
+deactivate os
+
+thread --> jvm: WorkDone
+deactivate thread
+
+jvm --> jThread: Done
+deactivate jvm
+
+@enduml
+hotspot/src/share/vm/runtime/thread.cpp
+hotspot/src/share/vm/runtime/os.cpp
+hotspot/src/os/linux/vm/os_linux.cpp
+
+jdk/src/share/native/java/lang/Thread.c -> java/lang/Thread.java
+jdk/src/share/native/sun/reflect/NativeAccessor.c -> sun/reflect/NativeMethodAccessorImpl.java
