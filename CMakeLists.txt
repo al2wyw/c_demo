@@ -16,3 +16,4 @@ add_executable(frame frame.c)
 add_executable(def def.c)
 
 add_definitions(-DCC_INTR)
+add_executable(branch branch.c)
