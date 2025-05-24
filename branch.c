@@ -2,6 +2,13 @@
 
 int branch(int);
 
+/*
+int main(int argc, char *argv[]) {
+    int i = branch(argc);//prevent from DCE
+    i++;
+    printf("%d", i);
+}
+ */
 int main() {
     int i = branch(9);
     i++;
