@@ -6,15 +6,20 @@
  *  $0xa(%rsi) -> %rsi + 0xa
  *  $0xa(%rdi,%rsi,$0x2) -> %rdi + %rsi * 0x2 + 0xa
  * 数据传输:
- * mov: mov S D -> D = S (S可以为imm、reg、address, D可以为reg、address, S和D不能同时是address)
+ * mov: mov S D -> D = S (S可以为imm、reg、address, D可以为reg、address, S和D不能同时是address, 所以只有5种类型)
  * lea: lea S D -> D = S (S为address,D为reg,把address的算术结果赋给reg,不做寻址)
+ * movabsq $0x0011223344556677, %rax        %rax=0011223344556677
+ * movb $-1，%al                            %rax=00112233445566FF
+ * movw $-1，%ax                            %rax=001122334455FFFF
+ * movl $-1, %eax                           %rax=00000000FFFFFFFF  !!!
+ * movg $-1, %rax                           %rax=FFFFFFFFFFFFFFFF
  * 位逻辑运算:
  * xor (xor %rdi %rdi用来置0)
  * and/test (test %rdi %rdi用来检查0、正数、负数)
  * or
  * not
  * 算术运算:
- * sub/comp: sub S D -> D = D - S
+ * sub/comp: sub S D -> D = D - S (S和D的规则和mov相同，当操作数是address时必须先从内存读取数据)
  * add
  * mul
  * 条件码访问:
