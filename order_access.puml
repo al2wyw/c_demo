@@ -1,0 +1,83 @@
+@startuml
+
+actor User
+participant "interpreterRuntime.cpp" as interpretRT
+participant "synchronizer.cpp" as syn
+participant "objectMonitor.cpp" as objectM
+participant "unsafe.cpp" as unsafe
+participant "bytecodeInterpreter.cpp" as interpret
+participant "orderAccess_linux_x86.inline.hpp" as OrderAccess
+
+User -> interpret: putField
+activate interpret
+
+interpret -> OrderAccess: release_store
+activate OrderAccess
+
+OrderAccess -> OrderAccess: volatile ptr assign
+
+OrderAccess --> interpret: Done
+deactivate OrderAccess
+
+interpret -> OrderAccess: storeload
+activate OrderAccess
+
+OrderAccess -> OrderAccess: fence (lock prefix asm)
+
+OrderAccess --> interpret: Done
+deactivate OrderAccess
+
+interpret --> User: Done
+deactivate interpret
+
+
+
+User -> unsafe: FullFence/LoadFence/StoreFence
+activate unsafe
+
+unsafe -> OrderAccess: fence/acquire/release
+activate OrderAccess
+
+OrderAccess --> unsafe: Done
+deactivate OrderAccess
+
+unsafe -> User: Done
+deactivate unsafe
+
+
+
+User -> interpretRT: monitor exit
+activate interpretRT
+
+interpretRT -> syn: slow exit
+activate syn
+
+syn --> objectM: exit
+activate objectM
+
+objectM -> OrderAccess: release_store_ptr
+activate OrderAccess
+
+OrderAccess -> OrderAccess: volatile ptr assign
+
+OrderAccess --> objectM: Done
+deactivate OrderAccess
+
+objectM -> OrderAccess: storeload
+activate OrderAccess
+
+OrderAccess -> OrderAccess: fence (lock prefix asm)
+
+OrderAccess --> objectM: Done
+deactivate OrderAccess
+
+objectM --> syn: Done
+deactivate objectM
+
+syn --> interpretRT: Done
+deactivate syn
+
+interpretRT --> User: Done
+deactivate interpretRT
+
+@enduml

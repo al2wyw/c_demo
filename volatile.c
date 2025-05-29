@@ -10,6 +10,9 @@
 // yo-yv 和 yo-yf 对比，调查volatile和mb的效果基本一致，val每次从内存读取
 // 使用 volatile 修饰的变量，编译器不会对其进行代码优化，cpu不会将其缓存到寄存器(但是还会受cpu cache的影响，不过有MESI一致性协议)，保证执行时每次都从内存中读取(防优化、防缓存)
 // c编译器无法感知多线程场景，默认代码逻辑是单线程的
+// #define mb() 	asm volatile("mfence":::"memory")
+// #define rmb()	asm volatile("lfence":::"memory")
+// #define wmb()	asm volatile("sfence":::"memory")
 #include<stdio.h>
 #include<stdlib.h>
 

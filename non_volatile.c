@@ -27,7 +27,7 @@ int val = 0;
 // 被优化掉了
 // volatile int val = 0:
 // cmpl    $0, 16793(%rip)      ##  <_val>
-// 直接比较imm和内存，从内存读取到reg再比较imm和reg，有什么不同 ???
+// 直接比较imm和内存，从内存读取到reg再比较imm和reg，有什么不同 (参考volatile详解，三个指令比一个指令更快)
 
 void *run() {
     sleep(1);
