@@ -13,6 +13,11 @@
  * movw $-1，%ax                            %rax=001122334455FFFF
  * movl $-1, %eax                           %rax=00000000FFFFFFFF  !!!
  * movg $-1, %rax                           %rax=FFFFFFFFFFFFFFFF
+ * 栈操作:
+ * pushg %rbp ->    subq $8,%rsp        movq %rbp,(%rsp)
+ * popq %rbp  ->    movq (%rsp),%rbp    addq $8,%rsp
+ * callq
+ * retq
  * 位逻辑运算:
  * xor (xor %rdi %rdi用来置0)
  * and/test (test %rdi %rdi用来检查0、正数、负数)
@@ -35,11 +40,13 @@
  * SF符号标识: 运算结果有符号整数的符号位,0表示正数,1表示负数
  * 前6个参数 rdi、rsi、rdx、rcx、r8、r9
  * 函数返回 rax
+ * callee保存寄存器，callee要保证这些寄存器的值在调用前后保持不变 rbx、rbp、r12 ~ r15
+ *   stack base
  * |----------------|
  * | args           | 6个以后的参数，每个参数占64bit，无论大小
- * |----------------| <- rbp + 16 (64bit) / previous rsp (通过rsp设置6个以后的参数)
+ * |----------------| <- rbp + 16 (64bit) / previous rsp (caller通过rsp设置6个以后的参数,第7个参数在栈顶)
  * | ret address    | 由call指令完成
- * |----------------|
+ * |----------------| <- caller 和 callee 的栈帧分界线
  * | previous rbp   | 由callee完成
  * |----------------| <- rbp
  * | saved regs     |
@@ -48,6 +55,7 @@
  * |----------------|
  * | others         |
  * |----------------| <- rsp
+ *   stack top
  *
  *        高地址
  * +------------------+
