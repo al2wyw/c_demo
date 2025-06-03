@@ -27,6 +27,8 @@
  * sub/comp: sub S D -> D = D - S (S和D的规则和mov相同，当操作数是address时必须先从内存读取数据)
  * add
  * mul
+ * mulq: mulq S -> mul S %rax (%rdx高64位,%rax低64位,结果一共128位)
+ * divq: divq S -> div S %rdx,%rax (%rdx高64位,%rax低64位,被除数一共128位,商在%rax,余数在%rdx)
  * 条件码访问:
  * set: sete(setz) D -> D = 1 when comp is equal else D = 0(movb ZF D)(把内存上的单字节或寄存器的高/低8bit置为0或1)
  * jmp: jmpg label -> jump to label when comp is greater
