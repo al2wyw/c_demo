@@ -590,4 +590,55 @@ MacroAssembler::call_VM()
 0x00007fffe1028859: mov 0x58(%rcx,%rbx,8),%eax
 0x00007fffe102885d: push %rax
 
-TemplateTable::fast_aldc(bool wide)
+// TemplateTable::fast_aldc(bool wide)
+
+第21篇-加载与存储指令之iload、_fast_iload等
+// TemplateTable::iload()
+// 将%ebx指向下一条字节码指令的首地址
+0x00007fffe1028d30: movzbl 0x2(%r13),%ebx
+// $0x15为_iload指令的操作码值
+0x00007fffe1028d35: cmp $0x15,%ebx
+// 当下一条指令为iload时，直接跳转到done
+0x00007fffe1028d38: je 0x00007fffe1028deb // done
+
+// 0xdf为_fast_iload指令的操作码值
+0x00007fffe1028d3e: cmp $0xdf,%ebx
+// 将_fast_iload2指令移动到%ecx
+0x00007fffe1028d44: mov $0xe0,%ecx
+0x00007fffe1028d49: je 0x00007fffe1028d5a // rewrite
+
+// 0x34为_caload指令的操作码
+// _caload指令表示从数组中加载一个char类型数据到操作数栈
+0x00007fffe1028d4b: cmp $0x34,%ebx
+// 将_fast_icaload移动到%ecx中
+0x00007fffe1028d4e: mov $0xe1,%ecx
+0x00007fffe1028d53: je 0x00007fffe1028d5a // rewrite
+
+// 将_fast_iload移动到%ecx中
+0x00007fffe1028d55: mov $0xdf,%ecx
+
+// -- rewrite --
+
+// 调用patch_bytecode()函数
+// 重写为fast版本，因为%cl中存储的是字节码的fast版本，%ecx的8位叫%cl
+0x00007fffe1028de7: mov %cl,0x0(%r13)
+
+// -- done --
+
+// 获取字节码指令的操作数，这个操作数为本地变量表的索引
+0x00007fffe1028deb: movzbl 0x1(%r13),%ebx
+0x00007fffe1028df0: neg %rbx
+// 通过本地变量表索引从本地变量表中加载值到%eax中，
+// %eax中存储的就是栈顶缓存值，所以不需要压入栈内
+0x00007fffe1028df3: mov (%r14,%rbx,8),%eax
+ cur        next      rewrite
+iload ->    iload
+      ->    fast_iload   ->  fast_iload2
+      ->    其他          ->  fast_iload
+
+第22篇-字节码运算指令
+空白
+第23篇-字节码类型转换指令
+空白
+第24篇-对象操作指令之getstatic
+
