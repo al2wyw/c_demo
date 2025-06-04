@@ -1,0 +1,452 @@
+第1篇-关于运行时，开篇说的简单些
+不过由于Java方法与C/C++函数的调用约定不同，所以并不能直接调用，需要JavaCalls::call()这个函数辅助调用
+从C/C++方法中调用的一些Java方法主要有：
+（1）Java主类中的main()方法；
+（2）Java主类装载时，调用JavaCalls::call()函数执行checkAndLoadMain()方法；
+（3）类的初始化过程中，调用JavaCalls::call()函数执行的Java类初始化方法<clinit>，可以查看JavaCalls::call_default_constructor()函数，有对<clinit>方法的调用逻辑；
+（4）我们先省略main方法的执行流程（其实main方法的执行也是先启动一个JavaMain线程，套路都是一样的），单看某个JavaThread的启动过程。JavaThread的启动最终都要通过一个native方法java.lang.Thread#start0()完成的，这个方法经过解释器的native_entry入口，调用到了JVM_StartThread()函数。其中的static void thread_entry(JavaThread* thread, TRAPS)函数中会调用JavaCalls::call_virtual()函数。JavaThread最终会通过JavaCalls::call_virtual()函数来调用字节码中的run()方法；（5）在SystemDictionary::load_instance_class()这个能体现双亲委派的函数中，如果类加载器对象不为空，则会调用这个类加载器的loadClass()函数（通过call_virtual()函数来调用）来加载类。
+
+// HotSpot VM里对JNI的CallStaticVoidMethod的实现。留意要传给Java方法的参数以C的可变长度参数传入，这个函数将其收集打包为JNI_ArgumentPusherVaArg对象
+-> jni_CallStaticVoidMethod() 
+ 
+	// 这里进一步将要传给Java的参数转换为JavaCallArguments对象传下去 
+	-> jni_invoke_static() 
+   
+	    // 真正底层实现的开始。这个方法只是层皮，把JavaCalls::call_helper()用os::os_exception_wrapper()包装起来，目的是设置HotSpot VM的C++层面的异常处理
+	    -> JavaCalls::call()
+	 
+	       -> JavaCalls::call_helper()
+	          -> //... 检查目标方法是否为空方法，是的话直接返回
+	          -> //... 检查目标方法是否“首次执行前就必须被编译”，是的话调用JIT编译器去编译目标方法
+	          -> //... 获取目标方法的解释模式入口from_interpreted_entry，下面将其称为entry_point
+	          -> //... 确保Java栈溢出检查机制正确启动
+	          -> //... 创建一个JavaCallWrapper，用于管理JNIHandleBlock的分配与释放，以及在调用Java方法前后保存和恢复Java的frame pointer/stack pointer
+
+	          //... StubRoutines::call_stub()返回一个指向call stub的函数指针，
+	          // 紧接着调用这个call stub，传入前面获取的entry_point和要传给Java方法的参数等信息
+	          -> StubRoutines::call_stub()(...) 
+	             // call stub是在VM初始化时生成的。对应的代码在StubGenerator::generate_call_stub()函数中
+	             -> //... 把相关寄存器的状态调整到解释器所需的状态
+	             -> //... 把要传给Java方法的参数从JavaCallArguments对象解包展开到解释模式calling convention所要求的位置
+	             -> //... 跳转到前面传入的entry_point，也就是目标方法的from_interpreted_entry
+
+	                -> //... 在-Xcomp模式下，实际跳入的是i2c adapter stub，将解释模式calling convention传入的参数挪到编译模式calling convention所要求的位置
+	                       -> //... 跳转到目标方法被JIT编译后的代码里，也就是跳到 nmethod 的 VEP 所指向的位置
+	                            -> //... 正式开始执行目标方法被JIT编译好的代码 <- 这里就是"main()方法的真正入口"
+
+第2篇-关于运行时的call_helper()函数
+native方法的栈帧、Java解释栈帧和Java编译栈帧都会在宿主栈中分配，这些不同的栈帧都紧密的挨在一起
+调用call_stub()返回的函数，需要传递8个参数。如下：
+link 此变量的类型为JavaCallWrapper，这个变量对于栈展开过程非常重要，后面会详细介绍；
+result_val_address 函数返回值地址；
+result_type 函数返回类型；
+method() 当前要执行的方法。通过此参数可以获取到Java方法所有的元数据信息，包括最重要的字节码信息，这样就可以根据字节码信息解释执行这个方法了；
+entry_point HotSpot每次在调用Java函数时，必然会调用CallStub函数指针，这个函数指针的值取自_call_stub_entry，HotSpot通过_call_stub_entry指向被调用函数地址。在调用函数之前，必须要先经过entry_point，HotSpot实际是通过entry_point从method()对象上拿到Java方法对应的第1个字节码命令，这也是整个函数的调用入口；
+args->parameters() 描述Java函数的入参信息；
+args->size_of_parameters() 描述Java函数的入参数量；
+CHECK 当前线程对象
+
+第3篇-CallStub新栈帧的创建
+static CallStub call_stub(){
+	return (CallStub)( 
+    	unsigned int(_call_stub_entry) );
+}
+_call_stub_entry的生成:
+JavaMain()
+InitializeJVM()
+JNI_CreateJavaVM()
+Threads::create_vm() 	 	
+init_globals()
+stubRoutines_init1()
+StubRoutines::initialize1() 	
+StubGenerator_generate()
+StubGenerator::StubGenerator() 	 	 	
+StubGenerator::generate_initial()
+StubRoutines::_call_stub_entry = generate_call_stub(
+        StubRoutines::_call_stub_return_address
+);
+
+第4篇-JVM终于开始调用Java主类的main()方法
+空
+第5篇-调用Java方法后弹出栈帧及处理返回结果
+统合这一篇和前几篇文章，我们应该学习到C/C++的调用约定以及Java方法在解释执行下的调用约定
+
+第6篇-Java方法新栈帧的创建
+from_interpreted_entry通过Method::link_method函数从_entry_table读取到对应的entry进行赋值，而_entry_table的生成则通过以下调用栈:
+JavaMain()
+InitializeJVM()
+JNI_CreateJavaVM()
+Threads::create_vm()
+init_globals()
+interpreter_init()
+TemplateInterpreter::initialize() 	
+InterpreterGenerator::InterpreterGenerator()
+TemplateInterpreterGenerator::generate_all()
+AbstractInterpreterGenerator::generate_method_entry
+address InterpreterGenerator::generate_normal_entry(bool synchronized) {
+
+		// ...
+
+		// entry_point函数的代码入口地址
+		address entry_point = __ pc(); 		
+
+		// 当前rbx中存储的是指向Method的指针，
+		// 通过Method*找到ConstMethod*
+		const	Address constMethod(rbx,Method::const_offset()); 
+
+		// 通过Method*找到AccessFlags
+		const	Address access_flags(rbx,
+								Method::access_flags_offset()); 
+
+		// 通过ConstMethod*得到parameter的大小
+		const	Address size_of_parameters(
+								rdx,ConstMethod::size_of_parameters_offset());
+
+		// 通过ConstMethod*得到local变量的大小
+		const	Address size_of_locals(rdx, 
+									ConstMethod::size_of_locals_offset());		
+
+		// 上面已经说明了获取各种方法元数据的计算方式，
+		// 但并没有执行计算，下面会生成对应的汇编来执行计算
+		// 计算ConstMethod*，保存在rdx里面
+		__ movptr(rdx, constMethod); 
+
+		// 计算parameter大小，保存在rcx里面 
+		__ load_unsigned_short(rcx, size_of_parameters);	
+
+		// rbx：保存基址；rcx：保存循环变量；
+		// rdx：保存目标地址；rax：保存返回地址（下面用到）
+		// 此时的各个寄存器中的值如下：
+		// rbx: Method*
+		// rcx: size of parameters
+		// r13: 
+		// sender_sp (could differ from sp+wordSize 
+		// if we were called via c2i ) 即调用者的栈顶地址
+		// 计算local变量的大小，保存到rdx
+		__ load_unsigned_short(rdx, size_of_locals);
+
+		// 由于局部变量表用来存储传入的参数和被调
+		// 用方法的局部变量，所以rdx减去
+		// rcx后就是被调用方法的局部变量可使用的大小 
+		__ subl(rdx, rcx); 
+
+		// ... 
+
+		// 返回地址是在CallStub中保存的，如果不弹
+		// 出堆栈到rax，中间会有个
+		// return address使的局部变量表不是连续的，
+		// 这会导致其中的局部变量计算方式不一致，所以
+		// 暂时将返回地址存储到rax中
+		__ pop(rax); 
+
+		// 计算第1个参数的地址：
+		// 当前栈顶地址 + 变量大小 * 8 - 一个字大小
+		// 注意，因为地址保存在低地址上，而堆栈是向低
+		// 地址扩展的，所以只需加n-1个
+		// 变量大小就可以得到第1个参数的地址
+		__ lea(r14, Address(rsp, rcx, Address::times_8, -wordSize)); 
+
+		// 把函数的局部变量设置为0,也就是做初始化，
+		// 防止之前遗留下的值影响
+		// rdx：被调用方法的局部变量可使用的大小
+		{
+				Label exit, loop;
+				__ testl(rdx, rdx);
+				// 如果rdx<=0，不做任何操作
+				__ jcc(Assembler::lessEqual, exit); 
+				__ bind(loop);
+				// 初始化局部变量
+				__ push((int)	NULL_WORD); 
+				__ decrementl(rdx); 
+				__ jcc(Assembler::greater, loop);
+				__ bind(exit);
+		} 
+
+		// 生成固定桢
+		generate_fixed_frame(false); 
+	
+		// ... 省略统计及栈溢出等逻辑，后面会详细介绍 
+		// 如果是同步方法时，还需要执行lock_method()
+		// 函数，所以会影响到栈帧布局 
+		if	(synchronized) {
+				lock_method();
+		} 
+
+		// 跳转到目标Java方法的第一条字节码指令，
+		// 并执行其对应的机器指令
+        __ dispatch_next(vtos); 
+
+		// ... 省略统计相关逻辑，后面会详细介绍 
+		return	entry_point;
+}
+
+第7篇-为Java创建帧栈
+void TemplateInterpreterGenerator::generate_fixed_frame(bool native_call) {
+	// 把返回地址紧接着局部变量区保存
+	__ push(rax); 
+	// 为Java方法创建栈帧 
+	__ enter(); 
+	// 保存调用者的栈顶地址 
+	__ push(r13); 
+	// 暂时将last_sp属性的值设置为NULL_WORD 
+	__ push((int)NULL_WORD);
+	// 获取ConstMethod*并保存到r13中
+	__ movptr(r13, Address(rbx, Method::const_offset())); 
+	// 保存Java方法字节码的地址到r13中
+	__ lea(r13, Address(r13, ConstMethod::codes_offset())); 
+	// 保存Method*到堆栈上
+	__ push(rbx);   
+
+	// ProfileInterpreter属性的默认值为true，
+	// 表示需要对解释执行的方法进行相关信息的统计
+	if (ProfileInterpreter) {
+		Label method_data_continue;
+		// MethodData结构基础是ProfileData，
+		// 记录函数运行状态下的数据
+		// MethodData里面分为3个部分，
+		// 一个是函数类型等运行相关统计数据，
+		// 一个是参数类型运行相关统计数据，
+		// 还有一个是extra扩展区保存着
+		// deoptimization的相关信息
+		// 获取Method中的_method_data属性的值并保存到rdx中
+		__ movptr(rdx, Address(rbx, in_bytes(Method::method_data_offset())));
+
+		__ testptr(rdx, rdx);
+		__ jcc(Assembler::zero, method_data_continue);
+		// 执行到这里，说明_method_data已经进行了初始化，
+		// 通过MethodData来获取_data属性的值并存储到rdx中
+		__ addptr(rdx, in_bytes(MethodData::data_offset()));
+		__ bind(method_data_continue);
+		__ push(rdx); 
+
+	} else {
+		__ push(0);
+	}
+
+
+	// 获取ConstMethod*存储到rdx
+	__ movptr(rdx, Address(rbx, 
+	    Method::const_offset()));
+	// 获取ConstantPool*存储到rdx
+	__ movptr(rdx, Address(rdx, 
+	     ConstMethod::constants_offset())); 
+	// 获取ConstantPoolCache*并存储到rdx
+	__ movptr(rdx, Address(rdx, 
+	     ConstantPool::cache_offset_in_bytes())); 
+	// 保存ConstantPoolCache*到堆栈上
+	__ push(rdx); 
+	// 保存第1个参数的地址到堆栈上
+	__ push(r14); 
+
+
+	if (native_call) {
+		// native方法调用时，不需要保存Java
+		// 方法的字节码地址，因为没有字节码
+		__ push(0); 
+	} else {
+		// 保存Java方法字节码地址到堆栈上，
+		// 注意上面对r13寄存器的值进行了更改
+		__ push(r13);
+	}
+
+
+	// 预先保留一个slot，后面有大用处
+	__ push(0); 
+	// 将栈底地址保存到这个slot上
+	__ movptr(Address(rsp, 0), rsp); 
+
+}
+generate_fixed_frame执行后寄存器的状态:
+rbx：Method*
+ecx：invocation counter
+r13：bcp(byte code pointer)
+rdx：ConstantPool* 常量池的地址
+r14：本地变量表第1个参数的地址
+
+第8篇-dispatch_next()函数分派字节码
+// 从generate_fixed_frame()函数生成
+// Java方法调用栈帧的时候，
+// 如果当前是第一次调用，那么r13指向
+// 的是字节码的首地址，
+// 即第一个字节码，此时的step参数为0
+void InterpreterMacroAssembler::dispatch_next(TosState	state, int	step) { 
+		load_unsigned_byte(rbx, Address(r13, step)); 
+		// 在当前字节码的位置，指针向前移动step宽度，
+		// 获取地址上的值，这个值是Opcode（范围1~202），
+		// 存储到rbxstep的值由字节码指令
+		// 和它的操作数共同决定
+		// 自增r13供下一次字节码分派使用
+		increment(r13, step); 
+
+		// 返回当前栈顶状态的所有字节码入口点
+		dispatch_base(state, Interpreter::dispatch_table(state));
+}
+
+void	InterpreterMacroAssembler::dispatch_base(
+		TosState		state, // 表示栈顶缓存状态
+		address* table,
+		bool	verifyoop
+) {
+
+		// ...
+
+		// 获取当前栈顶状态字节码转发表
+		// 的地址，保存到rscratch1
+		lea(rscratch1, ExternalAddress((address)table));
+		// 跳转到字节码对应的入口执行机器码指令
+		// address = rscratch1 + rbx * 8
+		jmp(Address(rscratch1, rbx, Address::times_8));
+}
+
+dispatch_next生成的汇编:
+
+// 在generate_fixed_frame()函数中
+// 已经让%r13存储了bcp
+// %ebx中存储的是字节码的Opcode，也就是操作码
+movzbl 0x0(%r13),%ebx 
+		
+// $0x7ffff73ba4a0这个地址指向的
+// 是对应state状态(out tos)下的一维数组，长度为256
+movabs $0x7ffff73ba4a0,%r10	
+
+// 注意%r10中存储的是常量，根据计算公式
+// %r10+%rbx*8来获取指向存储入口地址的地址，
+// 通过*(%r10+%rbx*8)获取到入口地址，
+// 然后跳转到入口地址执行
+jmpq *(%r10,%rbx,8)
+
+// 参数i就是opcode, _table为9x256的数组
+void DispatchTable::set_entry(
+		int i, EntryPoint& entry) {
+		_table[btos][i] = entry.entry(btos);
+		_table[ctos][i] = entry.entry(ctos);
+		_table[stos][i] = entry.entry(stos);
+		_table[atos][i] = entry.entry(atos);
+		_table[itos][i] = entry.entry(itos);
+		_table[ltos][i] = entry.entry(ltos);
+		_table[ftos][i] = entry.entry(ftos);
+		_table[dtos][i] = entry.entry(dtos);
+		_table[vtos][i] = entry.entry(vtos);
+}
+_table的一维为栈顶缓存状态，二维为Opcode，通过这2个维度能够找到一段机器指令，这就是根据当前的栈顶缓存状态定位到的字节码需要执行的机器指令片段
+
+第9篇-字节码指令的定义
+Bytecodes::initialize()
+def(_nop , "nop"                 , "b"    , NULL    , T_VOID , 0, false);
+bytecode name就是字节码名称；
+wide表示字节码前面是否可以加wild，如果可以，则值为"wbii"；
+result tp表示指令执行后的结果类型，如为T_ILLEGAL时，表示只参考当前字节码无法决定执行结果的类型，如_invokevirtual方法调用指令，结果类型应该为方法返回类型，但是此时只参数这个调用方法的字节码指令是无法决定的；
+stk表示对表达式栈深度的影响，如_nop指令不执行任何操作，所以对表达式栈的深度无影响，stk的值为0；当用_iconst_0向栈中压入0时，栈的深度增加1，所以stk的值为1。当为_lconst_0时，栈的深度会增加2；当为_lstore_0时，栈的深度会减少2；
+traps表示can_trap，这个比较重要，在后面会详细介绍； ???
+format，这个属性能表达2个意思，首先能表达字节码的格式，另外还能表示字节码的长度。
+format详解:
+b：表示字节码指令是非可变长度的，所以对于tableswitch、lookupswitch这种可变长度的指令来说，format字符串中不会含有b字符 
+c：操作数为有符号的常量，如bipush指令将byte带符号扩展为一个int类型的值，然后将这个值入栈到操作数栈中 
+i：操作数为无符号的本地变量表索引值，如iload指令从局部变量表加载一个int类型的值到操作数栈中 
+j：操作数为常量池缓存的索引，注意常量池缓存索引不同与常量池索引，关于常量池索引，在《深入剖析Java虚拟机：源码剖析与实例详解》基础卷中详细介绍过，这里不再介绍 
+k：操作数为无符号的常量池索引，如ldc指令将从运行时常量池中提取数据并压入操作数栈，所以格式为"bk" 
+o：操作数为分支偏移，如ifeq表示整数与零比较，如果整数为0，则比较结果为真，将操作数看为分支偏移量进行跳转，所以格式为”boo“ 
+_：可直接忽略
+w：可用来扩展局部变量表索引的字节码，这些字节码有iload、fload等，所以wild的值为"wbii" 
+
+第10篇-初始化模板表
+void TemplateInterpreter::initialize() {
+ 	if 	(_code != NULL) 
+		return;
+ 	 	
+ 	// 抽象解释器AbstractInterpreter的初始化，
+ 	// AbstractInterpreter是基于汇编模型的解释器的共同基类，
+ 	// 定义了解释器和解释器生成器的抽象接口
+ 	AbstractInterpreter::initialize(); ???
+ 	 	
+ 	// 模板表TemplateTable的初始化，模板表TemplateTable保存了各个字节码的模板
+ 	TemplateTable::initialize();
+ 	 	
+ 	// generate interpreter
+ 	{
+ 	 	ResourceMark rm;
+ 	 	int 	code_size = InterpreterCodeSize;
+ 	 	// CodeCache的Stub队列StubQueue的初始化
+ 	 	_code = new 	StubQueue(new 	InterpreterCodeletInterface, code_size, NULL,"Interpreter");
+ 	 	// 实例化模板解释器生成器对象TemplateInterpreterGenerator
+ 	 	InterpreterGenerator g(_code);
+ 	}
+ 	 	
+ 	// 初始化字节分发表
+ 	_active_table = _normal_table;
+}
+TemplateTable::initialize()
+def(Bytecodes::_invokevirtual, ubcp|disp|clvm|____, vtos, vtos, invokevirtual, f2_byte);
+标志位ubcp|disp|clvm|iswd详解:
+uses_bcp_bit，标志需要使用字节码指针。表示生成的模板代码中是否需要使用指向字节码指令的指针，其实也就是说是否需要读取字节码指令的操作数，所以含有操作数的指令大部分都需要bcp，但是有一些是不需要的，如monitorenter与monitorexit等，这些的操作数都在表达式栈中，表达式栈顶就是其操作数，并不需要从Class文件中读取，所以不需要bcp；
+does_dispatch_bit，标志表示自己是否含有控制流转发逻辑，如tableswitch、lookupswitch、invokevirtual、ireturn等字节码指令，本身就需要进行控制流转发；
+calls_vm_bit，标志是否需要调用JVM函数，在调用TemplateTable::call_VM()函数时都会判断是否有这个标志，通常方法调用JVM函数时都会通过调用TemplateTable::call_VM()函数来间接完成调用。JVM函数就是用C++写的函数；
+wide_bit，标志是否是wide指令（使用附加字节扩展全局变量索引）
+_tos_in与_tos_out：
+表示模板执行前与模板执行后的TosState(TopOfStack state: 栈顶的数据类型)
+如iload指令，执行之前栈顶状态为vtos，表示并不会使用栈顶的数据，所以如果程序为了提高执行效率将上一次执行的结果缓存到了寄存器中，那么此时就应该在执行iload指令之前将这个寄存器的值压入栈顶。iload指令执行之后的栈顶状态为itos，因为iload是向操作数栈中压入一个整数，所以此时的栈顶状态为int类型，那么这个值可以缓存到寄存器中，假设下一个指令为ireturn，那么栈顶之前与之后的状态分别为itos和itos，那么可直接将缓存在寄存器中的int类型返回即可，不需要做任何和操作数栈相关的操作。
+
+第11篇-初始化StubQueue
+StubQueue是用来保存生成的本地代码的Stub队列，队列每一个元素对应一个InterpreterCodelet对象，InterpreterCodelet对象继承自抽象基类Stub，包含了字节码对应的本地代码以及一些调试和输出信息。
+每个字节码都有一个InterpreterCodelet实例，所以在解释执行时，则执行的就是由InterpreterCodelet实例代表的机器指令片段。
+
+第12篇-认识CodeletMark
+InterpreterCodelet依赖CodeletMark完成自动创建和初始化。CodeletMark继承自ResourceMark，允许自动析构，执行的主要操作就是，会按照InterpreterCodelet中存储的实际机器指令片段分配内存并提交。
+
+第13篇-通过InterpreterCodelet存储机器指令片段
+空
+
+第14篇-生成重要的例程
+error exits								当方法出现时会调用这个例程，进行出错时程序退出
+bytecode tracing support				配置命令-XX:+TraceBytecodes后，进行字节码追踪
+return entry points 					函数返回入口
+invoke return entry points 				对于某些invoke字节码调用指令来说，需要一些特殊的返回入口
+earlyret entry points 					VMTI的EarlyReturn入口
+deoptimization entry points 	 		从"逆优化"调用返回的入口
+result handlers for native calls 		本地方法调用返回值处理handlers
+continuation entry points 				continuation入口
+safepoint entry points 					safepoint入口，当执行字节码时，如果要求解释执行进入安全点，则会执行safepoint入口指定的机器指令片段
+exception handling 						异常处理例程
+throw exception entrypoints 			抛出异常的入口
+all non-native method kinds 			非本地方法的入口
+all native method kinds					本地方法的入口
+Bytecodes 								字节码的入口
+
+字节码入口:
+TemplateInterpreterGenerator::generate_all()
+TemplateInterpreterGenerator::set_entry_points_for_all_bytes
+void TemplateInterpreterGenerator::set_short_entry_points(Template* t, address& bep, address& cep, address& sep, address& aep, address& iep, address& lep, address& fep, address& dep, address& vep) {
+  assert(t->is_valid(), "template must exist");
+  switch (t->tos_in()) {
+    case btos:
+    case ztos:
+    case ctos:
+    case stos:
+      ShouldNotReachHere();  // btos/ctos/stos should use itos.
+      break;
+    //vep: void entry point(当tos为vtos时的入口,从栈顶pop到寄存器进行缓存以满足atos)
+    //aep: object entry point(当tos为atos时的入口)
+    case atos: vep = __ pc(); __ pop(atos); aep = __ pc(); generate_and_dispatch(t); break;
+    case itos: vep = __ pc(); __ pop(itos); iep = __ pc(); generate_and_dispatch(t); break;
+    case ltos: vep = __ pc(); __ pop(ltos); lep = __ pc(); generate_and_dispatch(t); break;
+    case ftos: vep = __ pc(); __ pop(ftos); fep = __ pc(); generate_and_dispatch(t); break;
+    case dtos: vep = __ pc(); __ pop(dtos); dep = __ pc(); generate_and_dispatch(t); break;
+    case vtos: set_vtos_entry_points(t, bep, cep, sep, aep, iep, lep, fep, dep, vep);     break;
+    default  : ShouldNotReachHere();                                                 break;
+  }
+}
+void TemplateInterpreterGenerator::generate_and_dispatch(Template* t, TosState tos_out) {
+ 	// 生成当前字节码指令对应的机器指令片段
+ 	t->generate(_masm);
+
+ 	if 	(t->does_dispatch()) {
+ 	 	// asserts
+ 	} else 	{
+ 	 	// 生成分发到下一个字节码指令的逻辑 InterpreterMacroAssembler::dispatch_next
+ 	 	__ dispatch_epilog(tos_out, step);
+ 	}
+}
+
+上一个字节码指令的执行结果和下一个将要执行的字节码指令执行之前要求的栈顶缓存状态共同决定了指令的入口
+
+第15章-解释器及解释器生成器
