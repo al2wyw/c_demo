@@ -641,4 +641,84 @@ iload ->    iload
 第23篇-字节码类型转换指令
 空白
 第24篇-对象操作指令之getstatic
+void TemplateTable::getstatic(int byte_no) {
+  getfield_or_static(byte_no, true); // getstatic的byte_no值为1
+}
+// TemplateTable::getfield_or_static()
+// 获取ConstantPoolCache中ConstantPoolCacheEntry的index
+0x00007fffe101fd10: movzwl 0x1(%r13),%edx
+// 从栈中获取ConstantPoolCache的首地址
+0x00007fffe101fd15: mov -0x28(%rbp),%rcx
+// 左移2位，因为%edx中存储的是ConstantPoolCacheEntry index，
+// 左移2位是因为ConstantPoolCacheEntry的内存占用是4个字
+0x00007fffe101fd19: shl $0x2,%edx
+// 计算%rcx+%rdx*8+0x10，获取ConstantPoolCacheEntry[_indices,_f1,_f2,_flags]中的_indices
+// 因为ConstantPoolCache的大小为0x16字节，%rcx+0x10定位到第一个ConstantPoolCacheEntry的开始位置
+// %rdx*8算出来的是相对于第一个ConstantPoolCacheEntry的字节偏移
+0x00007fffe101fd1c: mov 0x10(%rcx,%rdx,8),%ebx
+// _indices向右移动16位后获取[set bytecode,get bytecode,original constant pool index]中的get bytecode与set bytecode
+0x00007fffe101fd20: shr $0x10,%ebx
+// 获取get bytecode字段的值
+0x00007fffe101fd23: and $0xff,%ebx
+// 0xb2是getstatic指令的Opcode，比较值，如果相等就说明已经连接，跳转到resolved
+0x00007fffe101fd29: cmp $0xb2,%ebx
+0x00007fffe101fd2f: je 0x00007fffe101fdce
 
+// 将getstatic字节码的Opcode存储到%ebx中
+0x00007fffe101fd35: mov $0xb2,%ebx
+
+// 省略通过调用MacroAssembler::call_VM()函数来执行InterpreterRuntime::resolve_get_put()函数的汇编代码
+// InterpreterRuntime::resolve_get_put()函数会填充常量池缓存中ConstantPoolCacheEntry信息
+// InterpreterRuntime::resolve_get_put调用get_index_u2_cpcache()函数从当前方法对应的栈帧中获取bcp，然后通过bcp来获取字节码指令的操作数，也就是常量池索引，
+// 得到常量池索引后调用LinkResolver::resolve_field_access()函数可能会连接类和字段(调用resolve_klass()连接类，调用resolve_field()连接字段)，
+// 然后将查询到的字段相关信息存储到fieldDescriptor中的fd字段，同时填充ConstantPoolCacheEntry信息
+
+// 将ConstantPoolCacheEntry的索引存储么%edx
+0x00007fffe101fdc2: movzwl 0x1(%r13),%edx
+// 将ConstantPoolCache的首地址存储到%rcx
+0x00007fffe101fdc7: mov -0x28(%rbp),%rcx
+// 获取对应的ConstantPoolCacheEntry对应的索引
+0x00007fffe101fdcb: shl $0x2,%edx
+
+// --resolved --
+
+// 获取[_indices,_f1,_f2,_flags]中的_f2，由于ConstantPoolCache占用16字节，而_indices
+// 和_f2各占用8字节，所以_f2的偏移为32字节，也就是0x32
+// _f2中保存的是字段在java.lang.Class实例中的字节偏移，通过此偏移就可获取此字段存储在
+// java.lang.Class实例的值
+0x00007fffe101fdce: mov 0x20(%rcx,%rdx,8),%rbx
+// 获取[_indices,_f1,_f2,_flags]中的_flags 
+0x00007fffe101fdd3: mov 0x28(%rcx,%rdx,8),%eax
+// 获取[_indices,_f1,_f2,_flags]中的_f1,_f1保存了字段拥有者，
+// 也就是java.lang.Class对象
+0x00007fffe101fdd7: mov 0x18(%rcx,%rdx,8),%rcx
+
+// 从_f1中获取_java_mirror属性的值
+0x00007fffe101fddc: mov 0x70(%rcx),%rcx
+// 将_flags向右移动28位，剩下TosState
+0x00007fffe101fde0: shr $0x1c,%eax
+0x00007fffe101fde3: and $0xf,%eax
+// 如果不相等，说明TosState的值不为0，则跳转到notByte
+0x00007fffe101fde6: jne 0x00007fffe101fdf6
+
+// btos
+// btos的编号为0,代码执行到这里时，可能栈顶缓存要求是btos
+// %rcx中存储的是_java_mirror，%rbx中存储的是_f2，由于静态变量存储在_java_mirror中，所以要获取
+// 对应的首地址并压入栈中
+0x00007fffe101fdec: movsbl (%rcx,%rbx,1),%eax
+0x00007fffe101fdf0: push %rax
+// 跳转到Done
+0x00007fffe101fdf1: jmpq 0x00007fffe101ff0c
+
+// -- notByte --
+// %eax中存储的是TosState，如果不为atos，则跳转到notObj
+0x00007fffe101fdf6: cmp $0x7,%eax
+0x00007fffe101fdf9: jne 0x00007fffe101fe90
+
+// 省略其他tos对应的汇编代码
+
+// Done
+0x00007fffe101ff0c: movzbl 0x3(%r13),%ebx
+0x00007fffe101ff11: add    $0x3,%r13
+0x00007fffe101ff15: movabs $0x10b873670,%r10
+0x00007fffe101ff1f: jmpq   *(%r10,%rbx,8)
