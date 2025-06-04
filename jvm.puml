@@ -16,6 +16,9 @@ TemplateInterpreter ..|> AbstractInterpreter
 Interpreter ..|> CppInterpreter: /#define CC_INTERP_ONLY
 Interpreter ..|> TemplateInterpreter: /#define NOT_CC_INTERP
 
+Assembler ..|> AbstractAssembler
+MacroAssembler ..|> Assembler
+InterpreterMacroAssembler ..|> MacroAssembler
 
 BytecodeInterpreter ...> InterpreterRuntime
 CppInterpreter ...> BytecodeInterpreter

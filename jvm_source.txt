@@ -446,7 +446,148 @@ void TemplateInterpreterGenerator::generate_and_dispatch(Template* t, TosState t
  	 	__ dispatch_epilog(tos_out, step);
  	}
 }
+上一个字节码指令的执行结果和下一个指令执行之前要求的栈顶缓存状态共同决定了指令的入口，也就是说一个指令其实有多个入口
 
-上一个字节码指令的执行结果和下一个将要执行的字节码指令执行之前要求的栈顶缓存状态共同决定了指令的入口
-
+15~18 跳过
 第15章-解释器及解释器生成器
+第16章-汇编器
+第17章-x86-64寄存器
+第18章-x86指令集之常用指令
+第19篇-加载与存储指令（1）
+字节码采用大端存储，所以需要通过bswap和位移计算变换为小端存储，参考sipush的汇编
+第20篇-加载与存储指令之ldc与_fast_aldc指令
+ldc指令可以加载String、方法类型或方法句柄的符号引用，但是如果要加载String、方法类型或方法句柄的符号引用，则会在类连接过程中重写ldc字节码指令为虚拟机内部使用的字节码指令_fast_aldc:
+// TemplateTable::ldc(bool wide)
+// movzbl指令负责拷贝一个字节，并用0填充其目
+// 的操作数中的其余各位，这种扩展方式叫"零扩展"
+// ldc指定的格式为ldc index，index为一个字节
+0x00007fffe1028530: movzbl 0x1(%r13),%ebx // 加载index到%ebx
+
+// %rcx指向缓存池首地址、%rax指向类型数组_tags首地址
+0x00007fffe1028535: mov -0x18(%rbp),%rcx
+0x00007fffe1028539: mov 0x10(%rcx),%rcx
+0x00007fffe102853d: mov 0x8(%rcx),%rcx
+0x00007fffe1028541: mov 0x10(%rcx),%rax
+
+// 从_tags数组获取操作数类型并存储到%edx中
+0x00007fffe1028545: movzbl 0x4(%rax,%rbx,1),%edx
+
+// $0x64代表JVM_CONSTANT_UnresolvedClass，比较，如果类还没有链接，则直接跳转到call_ldc
+0x00007fffe102854a: cmp $0x64,%edx
+0x00007fffe102854d: je 0x00007fffe102855d   // call_ldc
+
+// $0x67代表JVM_CONSTANT_UnresolvedClassInError，也就是如果类在链接过程中出现错误，则跳转到call_ldc
+0x00007fffe102854f: cmp $0x67,%edx
+0x00007fffe1028552: je 0x00007fffe102855d  // call_ldc
+
+// $0x7代表JVM_CONSTANT_Class，表示如果类已经进行了连接，则跳转到notClass
+0x00007fffe1028554: cmp $0x7,%edx
+0x00007fffe1028557: jne 0x00007fffe10287c0 // notClass
+
+// 调用TemplateTable::call_VM()函数
+// 类在没有连接或连接过程中出错，则执行如下的汇编代码
+// -- call_ldc --
+// 将wide的值移到%esi寄存器，为后续
+// 调用InterpreterRuntime::ldc(JavaThread* thread, bool wide)函数准备第2个参数
+0x00007fffe102855d: mov $0x0,%esi
+// 调用MacroAssembler::call_VM()函数，通过此函数来调用HotSpot VM中用
+// C++编写的函数，通过这个C++编写的函数来调用InterpreterRuntime::ldc()函数
+0x00007fffe1017542: callq 0x00007fffe101754c
+0x00007fffe1017547: jmpq 0x00007fffe10287ba // 跳转到E1
+// 调用MacroAssembler::call_VM_helper()函数
+// 将栈顶存储的返回地址设置到%rax中，也就是将存储地址0x00007fffe1017547
+// 的栈的slot地址设置到%rax中
+0x00007fffe101754c: lea 0x8(%rsp),%rax
+
+// 调用InterpreterMacroAssembler::call_VM_base()函数存储bcp到栈中特定位置
+0x00007fffe1017551: mov %r13,-0x38(%rbp)
+
+// 调用MacroAssembler::call_VM_base()函数
+// 将r15中的值移动到rdi寄存器中，也就是为函数调用准备第一个参数
+0x00007fffe1017555: mov %r15,%rdi
+// 只有解释器才必须要设置fp
+// 将last_java_fp保存到JavaThread类的last_java_fp属性中
+0x00007fffe1017558: mov %rbp,0x200(%r15)
+// 将last_java_sp保存到JavaThread类的last_java_sp属性中
+0x00007fffe101755f: mov %rax,0x1f0(%r15)
+
+// 调用MacroAssembler::call_VM_leaf_base()函数
+// 检查对齐
+// %esp对齐的操作，跳转到 L
+0x00007fffe1017566: test $0xf,%esp
+0x00007fffe101756c: je 0x00007fffe1017584
+// %esp没有对齐时的操作
+0x00007fffe1017572: sub $0x8,%rsp
+// 调用函数，也就是调用InterpreterRuntime::ldc()函数
+0x00007fffe1017576: callq 0x00007ffff66a22a2
+0x00007fffe101757b: add $0x8,%rsp
+// 跳转到E2
+0x00007fffe101757f: jmpq 0x00007fffe1017589
+// -- L --
+// %esp对齐的操作
+// 调用函数，也就是调用InterpreterRuntime::ldc()函数
+0x00007fffe1017584: callq 0x00007ffff66a22a2
+
+// 结束调用MacroAssembler::call_VM_leaf_base()函数
+
+// -- E2 --
+// 重置JavaThread::last_java_sp与JavaThread::last_java_fp属性的值
+0x00007fffe1017589: movabs $0x0,%r10
+0x00007fffe1017593: mov %r10,0x1f0(%r15)
+0x00007fffe101759a: movabs $0x0,%r10
+0x00007fffe10175a4: mov %r10,0x200(%r15)
+
+// check for pending exceptions (java_thread is set upon return)
+0x00007fffe10175ab: cmpq $0x0,0x8(%r15)
+// 如果没有异常则直接跳转到ok
+0x00007fffe10175b3: je 0x00007fffe10175be
+// 如果有异常则跳转到StubRoutines::forward_exception_entry()获取的例程入口
+0x00007fffe10175b9: jmpq 0x00007fffe1000420
+
+// -- ok --
+// 将JavaThread::vm_result属性中的值存储到%rax寄存器中并清空vm_result属性的值
+0x00007fffe10175be: mov 0x250(%r15),%rax
+0x00007fffe10175c5: movabs $0x0,%r10
+0x00007fffe10175cf: mov %r10,0x250(%r15)
+
+// 结束调用MacroAssembler::call_VM_base()函数
+
+// 恢复bcp与locals
+0x00007fffe10175d6: mov -0x38(%rbp),%r13
+0x00007fffe10175da: mov -0x30(%rbp),%r14
+
+// 结束调用MacroAssembler::call_VM_helper()函数
+
+0x00007fffe10175de: retq
+// 结束调用MacroAssembler::call_VM()函数
+
+整体调用栈:
+TemplateTable::call_VM()
+MacroAssembler::call_VM()
+    MacroAssembler::call_VM_helper()
+       InterpreterMacroAssembler::call_VM_base()
+           MacroAssembler::call_VM_base()
+                MacroAssembler::call_VM_leaf_base()
+最重要的就是在MacroAssembler::call_VM_base()函数中保存rsp、rbp的值到JavaThread::last_java_sp与JavaThread::last_java_fp属性中(避免rsp和rbp被破坏，同理r13和r14也被保护起来)，
+然后通过MacroAssembler::call_VM_leaf_base()函数生成的汇编代码来调用C++编写的InterpreterRuntime::ldc()函数
+
+// -- E1 --
+0x00007fffe10287ba: push %rax // 将调用的结果存储到表达式中
+0x00007fffe10287bb: jmpq 0x00007fffe102885e // 跳转到Done
+
+// -- notClass --
+// $0x4表示JVM_CONSTANT_Float
+0x00007fffe10287c0: cmp $0x4,%edx
+0x00007fffe10287c3: jne 0x00007fffe10287d9 // 跳到notFloat
+// 当ldc字节码指令加载的数为float时执行如下汇编代码
+0x00007fffe10287c5: vmovss 0x58(%rcx,%rbx,8),%xmm0
+0x00007fffe10287cb: sub $0x8,%rsp
+0x00007fffe10287cf: vmovss %xmm0,(%rsp)
+0x00007fffe10287d4: jmpq 0x00007fffe102885e // 跳转到Done
+
+// -- notFloat --
+// 当ldc字节码指令加载的为非float，也就是int类型数据时通过push加入表达式栈
+0x00007fffe1028859: mov 0x58(%rcx,%rbx,8),%eax
+0x00007fffe102885d: push %rax
+
+TemplateTable::fast_aldc(bool wide)
