@@ -4,7 +4,10 @@
 （1）Java主类中的main()方法；
 （2）Java主类装载时，调用JavaCalls::call()函数执行checkAndLoadMain()方法；
 （3）类的初始化过程中，调用JavaCalls::call()函数执行的Java类初始化方法<clinit>，可以查看JavaCalls::call_default_constructor()函数，有对<clinit>方法的调用逻辑；
-（4）我们先省略main方法的执行流程（其实main方法的执行也是先启动一个JavaMain线程，套路都是一样的），单看某个JavaThread的启动过程。JavaThread的启动最终都要通过一个native方法java.lang.Thread#start0()完成的，这个方法经过解释器的native_entry入口，调用到了JVM_StartThread()函数。其中的static void thread_entry(JavaThread* thread, TRAPS)函数中会调用JavaCalls::call_virtual()函数。JavaThread最终会通过JavaCalls::call_virtual()函数来调用字节码中的run()方法；（5）在SystemDictionary::load_instance_class()这个能体现双亲委派的函数中，如果类加载器对象不为空，则会调用这个类加载器的loadClass()函数（通过call_virtual()函数来调用）来加载类。
+（4）我们先省略main方法的执行流程（其实main方法的执行也是通过JLI_Launch先启动一个JavaMain线程，套路都是一样的），单看某个JavaThread的启动过程。
+JavaThread的启动最终都要通过一个native方法java.lang.Thread#start0()完成的，这个方法经过解释器的native_entry入口，调用到了JVM_StartThread()函数。
+其中的static void thread_entry(JavaThread* thread, TRAPS)函数中会调用JavaCalls::call_virtual()函数。JavaThread最终会通过JavaCalls::call_virtual()函数来调用字节码中的run()方法；
+（5）在SystemDictionary::load_instance_class()这个能体现双亲委派的函数中，如果类加载器对象不为空，则会调用这个类加载器的loadClass()函数（通过call_virtual()函数来调用）来加载类。
 
 // HotSpot VM里对JNI的CallStaticVoidMethod的实现。留意要传给Java方法的参数以C的可变长度参数传入，这个函数将其收集打包为JNI_ArgumentPusherVaArg对象
 -> jni_CallStaticVoidMethod() 
@@ -722,3 +725,152 @@ void TemplateTable::getstatic(int byte_no) {
 0x00007fffe101ff11: add    $0x3,%r13
 0x00007fffe101ff15: movabs $0x10b873670,%r10
 0x00007fffe101ff1f: jmpq   *(%r10,%rbx,8)
+
+第25篇-对象操作指令之getfield
+// TemplateTable::getfield_or_static()
+// 省略前面汇编代码，参考getstatic
+---- resolved ---- 
+ 
+// 获取[_indices,_f1,_f2,_flags]中的_f2，由于ConstantPoolCache占用16字节，而_indices
+// 和_f2各占用8字节，所以_f2的偏移为32字节，也就是0x32
+// _f2中保存的是字段在oop实例中的字节偏移，通过此偏移就可获取此字段存储在
+// oop中的值
+0x00007fffe102038e: mov 0x20(%rcx,%rdx,8),%rbx
+ 
+// 获取[_indices,_f1,_f2,_flags]中的_flags 
+0x00007fffe1020393: mov 0x28(%rcx,%rdx,8),%eax
+ 
+// 将栈中的objectref对象弹出到%rcx中
+0x00007fffe1020397: pop %rcx
+ 
+// provoke（激起; 引起; 引发） OS NULL exception if reg = NULL by
+// accessing M[reg] w/o changing any (non-CC) registers
+// NOTE: cmpl is plenty（足够） here to provoke a segv
+0x00007fffe1020398: cmp (%rcx),%rax
+ 
+// 将_flags向右移动28位，剩下TosState
+0x00007fffe102039b: shr $0x1c,%eax
+0x00007fffe102039e: and $0xf,%eax
+// 如果不相等，说明TosState的值不为0，则跳转到notByte
+0x00007fffe10203a1: jne 0x00007fffe10203ba
+ 
+// btos
+ 
+// btos的编号为0,代码执行到这里时，可能栈顶缓存要求是btos
+// %rcx中存储的是objectref，%rbx中存储的是_f2，获取字段对应的值存储到%rax中
+0x00007fffe10203a7: movsbl (%rcx,%rbx,1),%eax
+0x00007fffe10203ab: push %rax
+ 
+// 对字节码指令进行重写，将Bytecodes::_fast_bgetfield的Opcode存储到%ecx中
+0x00007fffe10203ac: mov $0xcc,%ecx
+// 将Bytecodes::_fast_bgetfield的Opcode更新到字节码指令的操作码
+0x00007fffe10203b1: mov %cl,0x0(%r13)
+// 跳转到---- Done ----
+0x00007fffe10203b5: jmpq 0x00007fffe102050f
+---- notByte ----
+0x00007fffe10203ba: cmp $0x7,%eax
+0x00007fffe10203bd: jne 0x00007fffe102045d  // 跳转到notObj
+
+// 省略其他tos对应的汇编代码
+
+def(_fast_agetfield , "fast_agetfield"      , "bJJ"  , NULL    , T_OBJECT , 0, true , _getfield );
+以_fast_agetfield内部定义的字节码指令为例为来，生成函数为TemplateTable::fast_accessfield()函数，汇编代码如下：
+0x00007fffe101e4e1: movzwl 0x1(%r13),%ebx
+0x00007fffe101e4e6: mov -0x28(%rbp),%rcx
+0x00007fffe101e4ea: shl $0x2,%ebx
+// 计算%rcx+%rdx*8+0x20，获取ConstantPoolCacheEntry[_indices,_f1,_f2,_flags]中的_f2
+// 因为ConstantPoolCache的大小为0x16字节，%rcx+0x20定位到第一个ConstantPoolCacheEntry的开始位置
+// %rdx*8算出来的是相对于第一个ConstantPoolCacheEntry的字节偏移
+0x00007fffe101e4ed: mov 0x20(%rcx,%rbx,8),%rbx
+ 
+// 检查空异常
+0x00007fffe101e4f2: cmp (%rax),%rax
+// %rax中存储的是objectref，也就是要从这个实例中获取字段的值，通过偏移%rbx后就
+// 能获取到偏移的值，然后加载到%eax
+0x00007fffe101e4f5: mov (%rax,%rbx,1),%eax
+
+第26篇-对象操作指令之putstatic
+void TemplateTable::putfield(int byte_no) {
+  putfield_or_static(byte_no, false);
+}
+// TemplateTable::resolve_cache_and_index()
+// 省略前面汇编代码，参考getstatic
+// ---- resolved ----
+ 
+// 执行如下代码时，表示字段已经连接完成
+0x00007fffe102004e: mov 0x20(%rcx,%rdx,8),%rbx
+0x00007fffe1020053: mov 0x28(%rcx,%rdx,8),%eax
+0x00007fffe1020057: mov 0x18(%rcx,%rdx,8),%rcx
+0x00007fffe102005c: mov 0x70(%rcx),%rcx
+0x00007fffe1020060: mov %eax,%edx
+// 将_flags向右移动21位，判断是否有volatile关键字
+0x00007fffe1020062: shr $0x15,%edx
+0x00007fffe1020065: and $0x1,%edx
+// 将_flags向右移动28位，剩下TosState
+0x00007fffe1020068: shr $0x1c,%eax
+ 
+// 如果不为btos，则跳转到notByte
+0x00007fffe102006b: and $0xf,%eax
+0x00007fffe102006e: jne 0x00007fffe1020083
+ 
+// btos
+ 
+// 将栈顶的值存储到%eax中，这个值会写入到对应的字段中
+0x00007fffe1020074: mov (%rsp),%eax
+0x00007fffe1020077: add $0x8,%rsp
+// %rcx为_java_mirror，%rbx为_f2，表示域在类中的偏移
+0x00007fffe102007b: mov %al,(%rcx,%rbx,1)
+0x00007fffe102007e: jmpq 0x00007fffe10201be // 跳转到Done
+// -- notByte --
+// 如果不为atos，则跳转到notObj
+0x00007fffe1020083: cmp $0x7,%eax
+0x00007fffe1020086: jne 0x00007fffe1020130
+
+// atos
+// 将栈顶的值弹出到%rax中，这个值将用来更新对应字段的值
+0x00007fffe102008c: pop %rax
+// ...
+// 将值更新到对应的字段上
+0x00007fffe1020115: mov %eax,(%rcx,%rbx,1)
+// 其中的0x9是CardTableModRefBS::card_shift，shr表示逻辑右移，由于%rcx指向的是
+// java.lang.Class实例的首地址，向右移后%rcx就算出了卡表的索引
+0x00007fffe1020118: shr $0x9,%rcx
+// 地址常量$0x7fffe07ff000表示卡表的基地址
+0x00007fffe102011c: movabs $0x7fffe07ff000,%r10
+// 将对应的卡表项标记为脏，其中常量0x0就表示是脏卡
+0x00007fffe1020126: movb $0x0,(%r10,%rcx,1)
+0x00007fffe102012b: jmpq 0x00007fffe10201be // 跳转到Done
+
+// 省略其他tos对应的汇编代码
+
+// ---- Done ----
+
+0x00007fffe10201be: test %edx,%edx
+0x00007fffe10201c0: je 0x00007fffe10201cb
+0x00007fffe10201c6: lock addl $0x0,(%rsp)
+
+// ---- notVolatile ----
+需要注意两点:
+（1）更新引用字段时，通过屏障将对应的卡表项标记为脏，这样可在GC过程中扫描脏卡就可将活跃对象标记出来而不会造成遗漏；
+（2）当字段有volatile关键字修饰时，需要填写lock指令前缀;
+    Intel手册对 lock 前缀的说明如下：
+        确保被修饰指令执行的原子性；(锁定特定内存地址,阻止其他的系统总线读取或修改这个内存地址)
+        禁止该指令与前面和后面的读写指令重排序；
+        指令执行完后把写缓冲区的所有数据刷新到内存中（这样这个指令之前的其他修改对所有处理器可见）
+
+第27篇-操作数栈管理指令
+空白
+第28篇-控制转移指令
+TemplateTable::_goto()
+// -XX:-ProfileInterpreter可排除生成一些不必要的统计指令
+goto生成的指令其实很多，因为goto指令是一个分支指令，其中会做一些性能统计以辅助进行编译优化，而且goto如果是在循环中的话，还可能会涉及到栈上替换的技术
+
+第29篇-调用Java主类的main()方法
+JavaMain()
+    LoadMainClass()
+    GetStaticMethodlD()
+    CallStaticVoidMethod()
+
+第30篇-解释执行main()方法小实例
+空白
+第31篇-方法调用指令之invokevirtual

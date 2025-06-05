@@ -12,7 +12,9 @@
  * movb $-1，%al                            %rax=00112233445566FF
  * movw $-1，%ax                            %rax=001122334455FFFF
  * movl $-1, %eax                           %rax=00000000FFFFFFFF  !!!
- * movg $-1, %rax                           %rax=FFFFFFFFFFFFFFFF
+ * movq $-1, %rax                           %rax=FFFFFFFFFFFFFFFF
+ * movzbq $-1, %rax  (b -> q)               %rax=00000000000000FF
+ * movsbq $-1, %rax  (b -> q)               %rax=FFFFFFFFFFFFFFFF
  * 栈操作:
  * pushg %rbp ->    subq $8,%rsp        movq %rbp,(%rsp)
  * popq %rbp  ->    movq (%rsp),%rbp    addq $8,%rsp
