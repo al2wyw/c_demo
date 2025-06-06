@@ -465,9 +465,13 @@ ldc指令可以加载String、方法类型或方法句柄的符号引用，但�
 0x00007fffe1028530: movzbl 0x1(%r13),%ebx // 加载index到%ebx
 
 // %rcx指向缓存池首地址、%rax指向类型数组_tags首地址
+// 获取Method*
 0x00007fffe1028535: mov -0x18(%rbp),%rcx
+// 获取ConstMethod*
 0x00007fffe1028539: mov 0x10(%rcx),%rcx
+// 获取ConstantPool*
 0x00007fffe102853d: mov 0x8(%rcx),%rcx
+// 获取ConstantPool::_tags
 0x00007fffe1028541: mov 0x10(%rcx),%rax
 
 // 从_tags数组获取操作数类型并存储到%edx中
@@ -698,12 +702,12 @@ iload ->    iload
 ConstantPoolCacheEntry结构:
               8     8      16
 _indices    [ b2 | b1 |  index  ] b2: put操作码  b1: get操作码  index: 原常量池索引
-_f1         [   metadata ptr    ] 字段拥有者 metadata ptr (method or klass)
-_f2         [   offset          ] 以字节为单位的字段偏移(在类定义中的偏移)
+_f1         [   metadata ptr    ] 元数据拥有者 metadata ptr (method or klass)
+_f2         [   offset          ] 字段偏移(在类定义中的偏移)、虚函数表中的索引编号、指向final方法的指针等
 _flags      [tos|0|F=1|0|0|0|f|v|0 |0000|field_index] (for field entries) field_index 字段索引(在class文件中的slot值)
 bit length  [ 4 |1| 1 |1|1|1|1|1|1 |-4--|--8--|--8--]
 _flags      [tos|0|F=0|M|A|I|f|0|vf|0000|00000|psize] (for method entries) psize 参数的大小
-flag说明: f: 1为final; v: 1为volatile; vf: virtual but final tos栈顶缓存: 字段类型对应的TosState枚举值; 操作码Opcode: 标识是否resolved
+flag说明: f: 1为final; v: 1为volatile; vf: virtual but final; I: 动态分派 tos栈顶缓存: 字段类型对应的TosState枚举值; 操作码Opcode: 标识是否resolved
 参考ConstantPoolCacheEntry::set_field
 
 void TemplateTable::getstatic(int byte_no) {
@@ -927,3 +931,88 @@ JavaMain()
 第30篇-解释执行main()方法小实例
 空白
 第31篇-方法调用指令之invokevirtual
+// TemplateTable::invokevirtual()
+// prepare_invoke 省略检查是否resolved，通过call_VM调用InterpreterRuntime::resolve_invoke()进行解析
+
+// **** resolved ****
+
+// ConstantPoolCacheEntry::_f2存储到%rbx
+0x00007fffe1022052: mov 0x20(%rcx,%rdx,8),%rbx 
+ // ConstantPoolCacheEntry::_flags存储到%edx
+0x00007fffe1022057: mov 0x28(%rcx,%rdx,8),%edx 
+ // 将flags移动到ecx中
+0x00007fffe102205b: mov %edx,%ecx 
+// 从flags中取出参数大小 
+0x00007fffe102205d: and $0xff,%ecx 
+
+// 获取到recv,%rcx中保存的是参数大小，最终计算参数所需要的大小为%rsp+%rcx*8-0x8，
+// flags中的参数大小对实例方法来说，已经包括了recv的大小
+// 如调用实例方法的第一个参数是this(recv)
+0x00007fffe1022063: mov -0x8(%rsp,%rcx,8),%rcx // recv保存到%rcx 
+
+// 将flags存储到r13中
+0x00007fffe1022068: mov %edx,%r13d 
+// 从flags中获取return type，也就是从_flags的高4位保存的TosState
+0x00007fffe102206b: shr $0x1c,%edx 
+
+// 将TemplateInterpreter::invoke_return_entry地址存储到%r10
+0x00007fffe102206e: movabs $0x7ffff73b6380,%r10 
+// %rdx保存的是return type，计算返回时例程的入口地址
+// 因为TemplateInterpreter::invoke_return_entry是数组，保存了一组函数调用后返回时的例程的入口
+0x00007fffe1022078: mov (%r10,%rdx,8),%rdx 
+// 向栈中压入返回地址
+0x00007fffe102207c: push %rdx 
+
+// 还原ConstantPoolCacheEntry::_flags 
+0x00007fffe102207d: mov %r13d,%edx 
+// 还原bcp
+0x00007fffe1022080: mov -0x38(%rbp),%r13
+
+// invokevirtual_helper 调用java函数的例程
+// 对于final方法来说，没有动态分派，所以不需要通过vtable进行目标查找
+// flags存储到%eax
+0x00007fffe1022084: mov %edx,%eax
+// 测试调用的方法是否为final
+0x00007fffe1022086: and $0x100000,%eax
+// 如果不为final就直接跳转到----notFinal----
+0x00007fffe102208c: je 0x00007fffe10220c0
+
+// 通过(%rcx)来获取receiver的值，如果%rcx为空，则会引起OS异常
+0x00007fffe1022092: cmp (%rcx),%rax
+
+// 省略统计相关代码部分
+
+// 设置调用者栈顶并保存
+0x00007fffe10220b4: lea 0x8(%rsp),%r13
+0x00007fffe10220b9: mov %r13,-0x10(%rbp)
+
+// 跳转到Method::_from_interpretered_entry入口去执行
+0x00007fffe10220bd: jmpq *0x58(%rbx)
+
+// **** notFinal ****
+
+// 对于非final方法来说，通过vtable查找动态分派需要调用的方法入口
+// invokevirtual指令调用的如果是非final方法，直接跳转到这里
+// %rcx中存储的是receiver，用oop来表示。通过oop获取Klass
+0x00007fffe10220c0: mov 0x8(%rcx),%eax
+
+// 调用MacroAssembler::decode_klass__not_null()函数生成下面的一个汇编代码
+0x00007fffe10220c3: shl $0x3,%rax // LogKlassAlignmentInBytes=0x03
+
+// 省略统计相关代码部分
+
+// 以下汇编代码通过lookup_virtual_method()函数生成，将vtable_entry_addr加载到%rbx中
+// %rax中存储的是recv_klass
+// %rbx中存储的是vtable_index，
+// 而0x1b8为InstanceKlass::vtable_start_offset()*wordSize+vtableEntry::method_offset_in_bytes()，
+// 其实就是通过动态分派找到需要调用的Method*并存储到%rbx中
+0x00007fffe1022169: mov 0x1b8(%rax,%rbx,8),%rbx
+
+// 设置调用者的栈顶地址并保存
+0x00007fffe1022171: lea 0x8(%rsp),%r13
+0x00007fffe1022176: mov %r13,-0x10(%rbp)
+
+// 跳转到Method::_from_interpreted_entry处执行
+0x00007fffe102217a: jmpq *0x58(%rbx)
+
+第32篇-解析interfacevirtual字节码指令

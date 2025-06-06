@@ -1,3 +1,4 @@
 The _length field is not declared in C++.  It is allocated after the declared nonstatic fields in arrayOopDesc
 更新引用字段时，通过屏障将对应的卡表项标记为脏
 synchronized方法的解析
+invokevirtual统计相关代码部分
