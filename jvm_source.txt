@@ -592,7 +592,59 @@ MacroAssembler::call_VM()
 0x00007fffe102885d: push %rax
 
 // TemplateTable::fast_aldc(bool wide)
+0x00007fffe10243d0: movzbl 0x1(%r13),%edx
 
+// 调用InterpreterMacroAssembler::load_resolved_reference_at_index()函数生成
+
+// shl表示逻辑左移，相当于乘4,因为ConstantPoolCacheEntry的大小为4个字
+0x00007fffe10243d5: shl $0x2,%edx
+
+// 获取Method*
+0x00007fffe10243d8: mov -0x18(%rbp),%rax
+// 获取ConstMethod*
+0x00007fffe10243dc: mov 0x10(%rax),%rax
+// 获取ConstantPool*
+0x00007fffe10243e0: mov 0x8(%rax),%rax
+// 获取ConstantPool::_resolved_references属性的值，这个值是一个指向对象数组的指针
+0x00007fffe10243e4: mov 0x30(%rax),%rax
+
+// JNIHandles::resolve(obj)
+0x00007fffe10243e8: mov (%rax),%rax
+
+// 从_resolved_references数组指定的下标索引处获取oop，先进行索引偏移
+0x00007fffe10243eb: add %rdx,%rax
+
+// 要在%rax上加0x10，是因为数组对象的头大小为2个字，加上后%rax就指向了oop
+0x00007fffe10243ee: mov 0x10(%rax),%eax
+
+ConstantPool::_resolved_references的调用栈(自下而上):
+ConstantPool::initialize_resolved_references()  constantPool.cpp     
+Rewriter::make_constant_pool_cache()  rewriter.cpp  
+Rewriter::Rewriter()  rewriter.cpp
+Rewriter::rewrite()  rewriter.cpp
+InstanceKlass::rewrite_class()  instanceKlass.cpp  
+InstanceKlass::link_class_impl()  instanceKlass.cpp
+
+// %eax中存储着表示目标的oop
+0x00007fffe1024479: test %eax,%eax
+// 如果已经获取到了oop，则跳转到resolved
+0x00007fffe102447b: jne 0x00007fffe1024481
+
+// 没有获取到oop，需要进行连接操作，0xe5是_fast_aldc的Opcode
+0x00007fffe1024481: mov $0xe5,%edx
+
+// 省略通过call_VM调用InterpreterRuntime::resolve_ldc() 进行解析
+
+string类型常量的解析调用栈(自下而上):
+ConstantPool::string_at_put()   constantPool.hpp
+ConstantPool::string_at_impl()  constantPool.cpp
+ConstantPool::resolve_constant_at_impl()     constantPool.cpp  
+ConstantPool::resolve_cached_constant_at()   constantPool.hpp  
+Bytecode_loadconstant::resolve_constant()    bytecode.cpp  
+InterpreterRuntime::resolve_ldc()            interpreterRuntime.cpp
+
+string_at_put会根据表示字符串的Symbol实例创建出表示字符串的oop, 然后存储到ConstantPool::_resolved_references属性中，
+再次解析时会优先从_resolved_references属性中获取，保证字符串常量在jvm的唯一性
 
 第21篇-加载与存储指令之iload、_fast_iload等
 // TemplateTable::iload()
