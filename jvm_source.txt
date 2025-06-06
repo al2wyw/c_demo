@@ -461,8 +461,6 @@ void TemplateInterpreterGenerator::generate_and_dispatch(Template* t, TosState t
 第20篇-加载与存储指令之ldc与_fast_aldc指令
 ldc指令可以加载String、方法类型或方法句柄的符号引用，但是如果要加载String、方法类型或方法句柄的符号引用，则会在类连接过程中重写ldc字节码指令为虚拟机内部使用的字节码指令_fast_aldc:
 // TemplateTable::ldc(bool wide)
-// movzbl指令负责拷贝一个字节，并用0填充其目
-// 的操作数中的其余各位，这种扩展方式叫"零扩展"
 // ldc指定的格式为ldc index，index为一个字节
 0x00007fffe1028530: movzbl 0x1(%r13),%ebx // 加载index到%ebx
 
@@ -595,6 +593,7 @@ MacroAssembler::call_VM()
 
 // TemplateTable::fast_aldc(bool wide)
 
+
 第21篇-加载与存储指令之iload、_fast_iload等
 // TemplateTable::iload()
 // 将%ebx指向下一条字节码指令的首地址
@@ -644,6 +643,17 @@ iload ->    iload
 第23篇-字节码类型转换指令
 空白
 第24篇-对象操作指令之getstatic
+ConstantPoolCacheEntry结构:
+              8     8      16
+_indices    [ b2 | b1 |  index  ] b2: put操作码  b1: get操作码  index: 原常量池索引
+_f1         [   metadata ptr    ] 字段拥有者 metadata ptr (method or klass)
+_f2         [   offset          ] 以字节为单位的字段偏移(在类定义中的偏移)
+_flags      [tos|0|F=1|0|0|0|f|v|0 |0000|field_index] (for field entries) field_index 字段索引(在class文件中的slot值)
+bit length  [ 4 |1| 1 |1|1|1|1|1|1 |-4--|--8--|--8--]
+_flags      [tos|0|F=0|M|A|I|f|0|vf|0000|00000|psize] (for method entries) psize 参数的大小
+flag说明: f: 1为final; v: 1为volatile; vf: virtual but final tos栈顶缓存: 字段类型对应的TosState枚举值; 操作码Opcode: 标识是否resolved
+参考ConstantPoolCacheEntry::set_field
+
 void TemplateTable::getstatic(int byte_no) {
   getfield_or_static(byte_no, true); // getstatic的byte_no值为1
 }
@@ -652,14 +662,14 @@ void TemplateTable::getstatic(int byte_no) {
 0x00007fffe101fd10: movzwl 0x1(%r13),%edx
 // 从栈中获取ConstantPoolCache的首地址
 0x00007fffe101fd15: mov -0x28(%rbp),%rcx
-// 左移2位，因为%edx中存储的是ConstantPoolCacheEntry index，
-// 左移2位是因为ConstantPoolCacheEntry的内存占用是4个字
+
+// 左移2位是因为ConstantPoolCacheEntry的内存占用是4个指针大小
 0x00007fffe101fd19: shl $0x2,%edx
-// 计算%rcx+%rdx*8+0x10，获取ConstantPoolCacheEntry[_indices,_f1,_f2,_flags]中的_indices
-// 因为ConstantPoolCache的大小为0x16字节，%rcx+0x10定位到第一个ConstantPoolCacheEntry的开始位置
+// 获取ConstantPoolCacheEntry[_indices,_f1,_f2,_flags]中的_indices
+// 因为ConstantPoolCache的大小为16字节，%rcx+0x10定位到第一个ConstantPoolCacheEntry的开始位置
 // %rdx*8算出来的是相对于第一个ConstantPoolCacheEntry的字节偏移
 0x00007fffe101fd1c: mov 0x10(%rcx,%rdx,8),%ebx
-// _indices向右移动16位后获取[set bytecode,get bytecode,original constant pool index]中的get bytecode与set bytecode
+// _indices向右移动16位后获取get bytecode与put bytecode
 0x00007fffe101fd20: shr $0x10,%ebx
 // 获取get bytecode字段的值
 0x00007fffe101fd23: and $0xff,%ebx
@@ -685,15 +695,12 @@ void TemplateTable::getstatic(int byte_no) {
 
 // --resolved --
 
-// 获取[_indices,_f1,_f2,_flags]中的_f2，由于ConstantPoolCache占用16字节，而_indices
-// 和_f2各占用8字节，所以_f2的偏移为32字节，也就是0x32
-// _f2中保存的是字段在java.lang.Class实例中的字节偏移，通过此偏移就可获取此字段存储在
-// java.lang.Class实例的值
+// 获取[_indices,_f1,_f2,_flags]中的_f2，
+// _f2中保存的是字段在java.lang.Class实例中的字节偏移，通过此偏移就可获取此字段存储在java.lang.Class实例的值
 0x00007fffe101fdce: mov 0x20(%rcx,%rdx,8),%rbx
 // 获取[_indices,_f1,_f2,_flags]中的_flags 
 0x00007fffe101fdd3: mov 0x28(%rcx,%rdx,8),%eax
-// 获取[_indices,_f1,_f2,_flags]中的_f1,_f1保存了字段拥有者，
-// 也就是java.lang.Class对象
+// 获取[_indices,_f1,_f2,_flags]中的_f1保存了字段拥有者，也就是java.lang.Class对象
 0x00007fffe101fdd7: mov 0x18(%rcx,%rdx,8),%rcx
 
 // 从_f1中获取_java_mirror属性的值
@@ -706,8 +713,7 @@ void TemplateTable::getstatic(int byte_no) {
 
 // btos
 // btos的编号为0,代码执行到这里时，可能栈顶缓存要求是btos
-// %rcx中存储的是_java_mirror，%rbx中存储的是_f2，由于静态变量存储在_java_mirror中，所以要获取
-// 对应的首地址并压入栈中
+// %rcx中存储的是_java_mirror，%rbx中存储的是_f2，静态变量存储在_java_mirror中
 0x00007fffe101fdec: movsbl (%rcx,%rbx,1),%eax
 0x00007fffe101fdf0: push %rax
 // 跳转到Done
@@ -731,10 +737,7 @@ void TemplateTable::getstatic(int byte_no) {
 // 省略前面汇编代码，参考getstatic
 ---- resolved ---- 
  
-// 获取[_indices,_f1,_f2,_flags]中的_f2，由于ConstantPoolCache占用16字节，而_indices
-// 和_f2各占用8字节，所以_f2的偏移为32字节，也就是0x32
-// _f2中保存的是字段在oop实例中的字节偏移，通过此偏移就可获取此字段存储在
-// oop中的值
+// 获取[_indices,_f1,_f2,_flags]中的_f2，_f2中保存的是字段在oop实例中的字节偏移，通过此偏移就可获取此字段存储在oop中的值
 0x00007fffe102038e: mov 0x20(%rcx,%rdx,8),%rbx
  
 // 获取[_indices,_f1,_f2,_flags]中的_flags 
@@ -743,9 +746,9 @@ void TemplateTable::getstatic(int byte_no) {
 // 将栈中的objectref对象弹出到%rcx中
 0x00007fffe1020397: pop %rcx
  
-// provoke（激起; 引起; 引发） OS NULL exception if reg = NULL by
+// provoke OS NULL exception if reg = NULL by
 // accessing M[reg] w/o changing any (non-CC) registers
-// NOTE: cmpl is plenty（足够） here to provoke a segv
+// NOTE: cmpl is plenty here to provoke a segv
 0x00007fffe1020398: cmp (%rcx),%rax
  
 // 将_flags向右移动28位，剩下TosState
@@ -778,9 +781,7 @@ def(_fast_agetfield , "fast_agetfield"      , "bJJ"  , NULL    , T_OBJECT , 0, t
 0x00007fffe101e4e1: movzwl 0x1(%r13),%ebx
 0x00007fffe101e4e6: mov -0x28(%rbp),%rcx
 0x00007fffe101e4ea: shl $0x2,%ebx
-// 计算%rcx+%rdx*8+0x20，获取ConstantPoolCacheEntry[_indices,_f1,_f2,_flags]中的_f2
-// 因为ConstantPoolCache的大小为0x16字节，%rcx+0x20定位到第一个ConstantPoolCacheEntry的开始位置
-// %rdx*8算出来的是相对于第一个ConstantPoolCacheEntry的字节偏移
+// 获取ConstantPoolCacheEntry[_indices,_f1,_f2,_flags]中的_f2
 0x00007fffe101e4ed: mov 0x20(%rcx,%rbx,8),%rbx
  
 // 检查空异常
