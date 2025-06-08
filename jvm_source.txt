@@ -969,6 +969,7 @@ JavaMain()
 0x00007fffe1022080: mov -0x38(%rbp),%r13
 
 // invokevirtual_helper 调用java函数的例程
+
 // 对于final方法来说，没有动态分派，所以不需要通过vtable进行目标查找
 // flags存储到%eax
 0x00007fffe1022084: mov %edx,%eax
@@ -1016,3 +1017,449 @@ JavaMain()
 0x00007fffe102217a: jmpq *0x58(%rbx)
 
 第32篇-解析interfacevirtual字节码指令
+// InterpreterRuntime::resolve_invoke()
+if (bytecode == Bytecodes::_invokevirtual || bytecode == Bytecodes::_invokeinterface) {
+    ResourceMark rm(thread);
+    // 调用method()函数从当前的栈帧中获取到需要执行的方法
+    Method* m1 = method(thread);
+    methodHandle m (thread, m1);
+ 
+    // 调用bci()函数从当前的栈帧中获取需要执行的方法的字节码索引
+    int i1 = bci(thread);
+    Bytecode_invoke call(m, i1);
+ 
+    // 当前需要执行的方法的签名
+    Symbol* signature = call.signature();
+ 
+    frame fm = thread->last_frame();
+    oop x = fm.interpreter_callee_receiver(signature);
+    receiver = Handle(thread,x);
+}
+//根据存储在当前栈中的bcp来获取字节码指令的操作数(常量池缓存项索引),然后调用LinkResolver::resolve_invoke()函数进行方法连接。
+{
+    JvmtiHideSingleStepping jhss(thread);
+    int cpcacheindex = get_index_u2_cpcache(thread, bytecode);
+    LinkResolver::resolve_invoke(info, receiver, pool,cpcacheindex, bytecode, CHECK);
+    ...
+}
+// 然后会间接调用LinkResolver::resolve_invokevirtual()函数，其中会调用resolve_pool()和resolve_vritual_call()函数分别连接常量池和方法调用指令。
+{
+ 
+  KlassHandle resolved_klass;
+  Symbol* method_name = NULL;
+  Symbol* method_signature = NULL;
+  KlassHandle current_klass;
+
+  resolve_pool(resolved_klass, method_name, method_signature, current_klass, pool, index, CHECK);
+  KlassHandle recvrKlass(THREAD, recv.is_null() ? (Klass*)NULL : recv->klass());
+  resolve_virtual_call(result, recv, recvrKlass, resolved_klass, method_name, method_signature, current_klass, true, true, CHECK);
+}
+// resolve_pool()调用栈，最终调用resolve_or_fail()函数进行class解析
+LinkResolver::resolve_pool()
+LinkResolver::resolve_klass()
+ConstantPool::klass_ref_at()
+ConstantPool::klass_at()
+ConstantPool::klass_at_impl()
+SystemDictionary::resolve_or_fail()
+
+// resolve_virtual_call()调用栈，先通过方法名和签名在resolve_method()中查找对应的方法，再在runtime_resolve_virtual_method中进行解析映射
+LinkResolver::resolve_virtual_call()
+LinkResolver::linktime_resolve_virtual_method()
+    LinkResolver::resolve_method()
+        LinkResolver::lookup_method_in_klasses()
+        LinkResolver::lookup_method_in_interfaces()
+LinkResolver::runtime_resolve_virtual_method()
+    LinkResolver::vtable_index_of_interface_method()
+    InstanceKlass::method_at_vtable()
+
+void LinkResolver::runtime_resolve_virtual_method(
+ CallInfo& result,
+ methodHandle resolved_method,
+ KlassHandle resolved_klass,
+ Handle recv,
+ KlassHandle recv_klass,
+ bool check_null_and_abstract,
+ TRAPS
+) {
+ 
+  int vtable_index = Method::invalid_vtable_index;
+  methodHandle selected_method;
+ 
+  // 当方法定义在接口中时，表示是miranda方法
+  if (resolved_method->method_holder()->is_interface()) { 
+    vtable_index = vtable_index_of_interface_method(resolved_klass,resolved_method);
+ 
+    InstanceKlass* inst = InstanceKlass::cast(recv_klass());
+    selected_method = methodHandle(THREAD, inst->method_at_vtable(vtable_index));
+  } else {
+    // 如果走如下的代码逻辑，则表示resolved_method不是miranda方法，需要动态分派且肯定有正确的vtable索引
+    vtable_index = resolved_method->vtable_index();
+ 
+    // 有些方法虽然看起来需要动态分派，但是如果这个方法有final关键字时，可进行静态绑定，所以直接调用即可
+    // final方法其实不会放到vtable中，除非final方法覆写了父类中的方法
+    if (vtable_index == Method::nonvirtual_vtable_index) {
+      selected_method = resolved_method;
+    } else {
+      // 根据vtable和vtable_index以及inst进行方法的动态分派
+      InstanceKlass* inst = (InstanceKlass*)recv_klass();
+      selected_method = methodHandle(THREAD, inst->method_at_vtable(vtable_index));
+    }
+  } 
+  
+  // 函数将查找到调用时需要的所有信息存储到CallInfo类型的result变量中, 后续就可以根据info中相关信息填充到ConstantPoolCacheEntry
+  result.set_virtual(resolved_klass, recv_klass, resolved_method, selected_method, vtable_index, CHECK);
+}
+void ConstantPoolCacheEntry::set_direct_or_vtable_call(
+ Bytecodes::Code invoke_code,
+ methodHandle method,
+ int vtable_index
+) {
+    // ...
+    // 可以看到，通过_invokevirtual指令时，并不一定都是动态分发，也有可能是静态绑定
+    case Bytecodes::_invokevirtual:
+      {
+        if (!is_vtable_call) {
+          assert(method->can_be_statically_bound(), "");
+          // set_f2_as_vfinal_method checks if is_vfinal flag is true.
+          set_method_flags(as_TosState(method->result_type()),
+                           ( 1      << is_vfinal_shift) |
+                           ((method->is_final_method() ? 1 : 0) << is_final_shift) |
+                           ((change_to_virtual ? 1 : 0) << is_forced_virtual_shift), // 在接口中调用Object中定义的方法
+                           method()->size_of_parameters());
+          set_f2_as_vfinal_method(method());
+        } else {
+          // 执行这里的逻辑时，表示方法是非静态绑定的非final方法，需要动态分派，则vtable_index的值肯定大于等于0
+          set_method_flags(as_TosState(method->result_type()),
+                           ((change_to_virtual ? 1 : 0) << is_forced_virtual_shift),
+                           method()->size_of_parameters());
+          // 对于动态分发来说，ConstantPoolCacheEntry::_f2中保存的是vtable_index
+          set_f2(vtable_index);
+        }
+        byte_no = 2;
+        break;
+      }
+}
+
+第33篇-方法调用指令之invokeinterface
+// TemplateTable::invokeinterface
+
+// 省略prepare_invoke的汇编代码
+
+// 将ConstantPoolCacheEntry::_flags的值存储到%r14d中
+0x00007fffe1022709: mov %edx,%r14d
+// 检测一下_flags中是否含有is_forced_virtual_shift标识，如果有，
+// 表示调用的是Object类中的方法，需要通过vtable进行动态分派
+0x00007fffe102270c: and $0x800000,%r14d
+0x00007fffe1022713: je 0x00007fffe1022812 // 跳转到----notMethod----
+
+// 省略invoke virtual的汇编代码
+
+// **** notMethod ****
+ 
+// 让%r14指向本地变量表
+0x00007fffe1022812: mov -0x30(%rbp),%r14 
+// %rcx中存储的是receiver，%edx中保存的是Klass
+0x00007fffe1022816: mov 0x8(%rcx),%edx 
+// LogKlassAlignmentInBytes=0x03，进行对齐处理
+0x00007fffe1022819: shl $0x3,%rdx
+ 
+// 如下代码是调用如下函数生成的：
+__ lookup_interface_method(rdx, // inputs: rec. class
+rax, // inputs: interface
+rbx, // inputs: itable index
+rbx, // outputs: method
+r13, // outputs: scan temp. reg
+no_such_interface);
+ 
+  
+// 获取vtable的起始地址 
+// %rdx中存储的是recv.Klass，获取Klass中
+// vtable_length属性的值
+0x00007fffe10228c1: mov 0x118(%rdx),%r13d 
+ 
+// %rdx：recv.Klass，%r13为vtable_length，
+// 最后r13指向第一个itableOffsetEntry
+// 加一个常量0x1b8是因为vtable之前是InstanceKlass，也就是vtable首地址的offset
+0x00007fffe10228c8: lea 0x1b8(%rdx,%r13,8),%r13 
+0x00007fffe10228d0: lea (%rdx,%rbx,8),%rdx 
+ 
+// 获取itableOffsetEntry::_interface并与%rax比较，%rax中存储的是要查找的接口
+0x00007fffe10228d4: mov 0x0(%r13),%rbx
+0x00007fffe10228d8: cmp %rbx,%rax
+// 如果相等，则直接跳转到---- found_method ----
+0x00007fffe10228db: je 0x00007fffe10228f3
+ 
+// **** search ****
+// 检测%rbx中的值是否为NULL，如果为NULL，
+// 那就说明receiver没有实现要查询的接口，itableOffsetEntry的尾节点是NULL
+0x00007fffe10228dd: test %rbx,%rbx
+// 跳转到---- L_no_such_interface ----
+0x00007fffe10228e0: je 0x00007fffe1022a8c
+0x00007fffe10228e6: add $0x10,%r13
+ 
+0x00007fffe10228ea: mov 0x0(%r13),%rbx
+0x00007fffe10228ee: cmp %rbx,%rax
+// 如果还是没有在itableOffsetEntry中找到接口类，
+// 则跳转到search继续进行查找
+0x00007fffe10228f1: jne 0x00007fffe10228dd // 跳转到---- search ----
+ 
+// **** found_method ****
+ 
+// 已经找到匹配接口的itableOffsetEntry，获取
+// itableOffsetEntry的offset属性并存储到%r13d中
+0x00007fffe10228f3: mov 0x8(%r13),%r13d
+// 通过recv_klass进行偏移后找到itableMethodEntry
+0x00007fffe10228f7: mov (%rdx,%r13,1),%rbx
+
+最终itableMethodEntry的定位依赖以下两个汇编:
+lea  (%rdx,%rbx,8),%rdx
+...
+mov  (%rdx,%r13,1),%rbx
+itableMethodEntry的地址 = recv_klass首地址 + 8 * index + itableOffset * 1
+itableMethodEntry数组的首地址 = recv_klass首地址 + itableOffset
+
+0x00007fffe10228fb: test %rbx,%rbx
+// 如果本来应该存储Method*的%rbx是空，则表示没有找到
+// 这个方法，跳转到---- no_such_method ----
+0x00007fffe10228fe: je 0x00007fffe1022987 
+ 
+// 保存调用者的栈顶指针
+0x00007fffe1022904: lea 0x8(%rsp),%r13 
+0x00007fffe1022909: mov %r13,-0x10(%rbp)
+// 跳转到Method::from_interpreted指向的例程并执行
+0x00007fffe102290d: jmpq *0x58(%rbx) 
+ 
+ 
+// 省略should_not_reach_here()函数生成的汇编
+ 
+ 
+// **** no_such_method ****
+// 当没有找到方法时，会跳转到这里执行
+ 
+// 弹出调用prepare_invoke()函数压入的返回地址
+0x00007fffe1022987: pop %rbx
+// 恢复让%r13指向bcp
+0x00007fffe1022988: mov -0x38(%rbp),%r13
+// 恢复让%r14指向本地变量表
+0x00007fffe102298c: mov -0x30(%rbp),%r14
+ 
+ 
+// ... 省略通过call_VM()函数生成的汇编来调用InterpreterRuntime::throw_abstractMethodError()函数
+// ... 省略调用should_not_reach_here()函数生成的汇编代码
+ 
+// **** no_such_interface ****
+ 
+// 当没有找到匹配的接口时执行的汇编代码
+0x00007fffe1022a8c: pop %rbx
+0x00007fffe1022a8d: mov -0x38(%rbp),%r13
+0x00007fffe1022a91: mov -0x30(%rbp),%r14
+ 
+// ... 省略通过call_VM()函数生成的汇编代码来调用InterpreterRuntime::throw_IncompatibleClassChangeError()函数
+// ... 省略调用should_not_reach_here()函数生成的汇编代码
+
+第34篇-解析invokeinterface字节码指令
+LinkResolver::resolve_interface_call()
+LinkResolver::linktime_resolve_interface_method()
+    LinkResolver::resolve_interface_method()
+        LinkResolver::lookup_method_in_klasses()
+        LinkResolver::lookup_method_in_interfaces()
+LinkResolver::runtime_resolve_interface_method()
+    LinkResolver::lookup_instance_method_in_klasses()
+
+第35篇-方法调用指令之invokespecial与invokestatic
+空白
+
+第36篇-方法返回指令之return
+def(Bytecodes::_areturn , ____|disp|clvm|____, atos, atos, _return , atos );
+def(Bytecodes::_return , ____|disp|clvm|____, vtos, vtos, _return , vtos);
+def(Bytecodes::_return_register_finalizer , ____|disp|clvm|____, vtos, vtos, _return , vtos);
+执行释放锁和退出当前栈帧的操作，生成函数都为TemplateTable::_return()。但是如果是Object对象的构造方法中的return指令，那么这个指令还可能会被重写为_return_register_finalizer指令
+
+// TemplateTable::_return()
+// 将JavaThread::do_not_unlock_if_synchronized属性存储到%dl中
+0x00007fffe101b770: mov 0x2ad(%r15),%dl
+// 重置JavaThread::do_not_unlock_if_synchronized属性值为false
+0x00007fffe101b777: movb $0x0,0x2ad(%r15)
+
+// 将Method*加载到%rbx中
+0x00007fffe101b77f: mov -0x18(%rbp),%rbx
+// 将Method::_access_flags加载到%ecx中
+0x00007fffe101b783: mov 0x28(%rbx),%ecx
+// 检查Method::flags是否包含JVM_ACC_SYNCHRONIZED
+0x00007fffe101b786: test $0x20,%ecx
+// 如果方法不是同步方法，跳转到----unlocked----
+0x00007fffe101b78c: je 0x00007fffe101b970
+
+
+// 如果在%dl寄存器中存储的_do_not_unlock_if_synchronized的值不为0，
+// 则跳转到no_unlock，表示不要释放和锁相关的资源
+0x00007fffe101b792: test $0xff,%dl
+0x00007fffe101b795: jne 0x00007fffe101ba90 // 跳转到----no_unlock----处
+
+// 在JavaThread类中定义了一个属性_do_not_unlock_if_synchronized，这个值表示在抛出异常的情况下不要释放receiver，此值仅在解释执行的情况下才会起作用
+
+// 将之前字节码指令执行的结果存储到表达式栈顶，
+// 由于return不需要返回执行结果，所以不需要设置返回值等信息，
+// 最终在这里没有生成任何push指令
+
+// 将BasicObjectLock存储到%rsi中，由于%rsi在调用C++函数时可做为
+// 第2个参数传递，所以如果要调用unlock_object就可以传递此值
+0x00007fffe101b79b: lea -0x50(%rbp),%rsi
+
+// 获取BasicObjectLock::obj属性地址存储到%rax中
+0x00007fffe101b79f: mov 0x8(%rsi),%rax
+
+// 如果不为0，则跳转到unlock处，因为不为0，表示
+// 这个obj有指向的锁对象，需要进行释放锁的操作
+0x00007fffe101b7a3: test %rax,%rax
+0x00007fffe101b7a6: jne 0x00007fffe101b8a8 // 跳转到----unlock----处
+
+// 如果是其它的return指令，则由于之前通过push指令将结果保存在
+// 表达式栈上，所以现在可通过pop将表达式栈上的结果弹出到对应寄存器中
+
+-0x50(%rbp)指向了第1个BasicObjectLock对象，其中的sizeof(BasicObjectLock)的值为16，
+BasicObjectLock中有2个属性，_lock(-0x50(%rbp))和_obj(-0x48(%rbp))，分别占用8字节。
+
+// ----unlock----
+
+// ============调用InterpreterMacroAssembler::unlock_object()函数生成如下的汇编代码==================
+
+// 将%r13存储到栈中，防止异常破坏了%r13寄存器中的值
+0x00007fffe101b8a8: mov %r13,-0x38(%rbp)
+
+// 将BasicObjectLock::_lock的地址存储到%rax寄存器中
+0x00007fffe101b8ac: lea (%rsi),%rax
+// 将BasicObjectLock::_obj存储到%rcx寄存器中
+0x00007fffe101b8af: mov 0x8(%rsi),%rcx
+
+// 将BasicObjectLock::_obj的值设置为NULL，表示释放锁操作
+0x00007fffe101b8b3: movq $0x0,0x8(%rsi)
+
+// ----------当UseBiasedLocking的值为true时，调用MacroAssembler::biased_locking_exit()生成如下的汇编代码------------
+// 从BasicObjectLock::_obj对象中取出mark属性值并相与
+0x00007fffe101b8bb: mov (%rcx),%rdx
+0x00007fffe101b8be: and $0x7,%rdx
+// 如果BasicObjectLock::_obj指向的oop的mark属性后3位是偏向锁的状态，则跳转到---- done ----
+0x00007fffe101b8c2: cmp $0x5,%rdx
+0x00007fffe101b8c6: je 0x00007fffe101b96c
+// ------------------------结束调用MacroAssembler::biased_locking_exit()生成的汇编代码---------------------
+
+// 将BasicObjectLock::_lock这个oop对象的_displaced_header属性值取出
+0x00007fffe101b8cc: mov (%rax),%rdx
+// 判断一下是否为锁的重入，如果是锁的重入，则跳转到---- done ----
+0x00007fffe101b8cf: test %rdx,%rdx
+0x00007fffe101b8d2: je 0x00007fffe101b96c
+
+// 让BasicObjectLock::_obj的那个oop的mark恢复为
+// BasicObjectLock::_lock中保存的原对象头
+0x00007fffe101b8d8: lock cmpxchg %rdx,(%rcx)
+// 如果为0，则表示锁的重入，跳转到---- done ---- ????
+0x00007fffe101b8dd: je 0x00007fffe101b96c
+
+// 让BasicObjectLock::_obj指向oop，这个oop的对象头已经替换为了BasicObjectLock::_lock中保存的对象头
+0x00007fffe101b8e3: mov %rcx,0x8(%rsi)
+
+// -----------省略调用call_VM()函数生成汇编代码来执行C++函数InterpreterRuntime::monitorexit()----------------
+
+// ---- done ----
+
+0x00007fffe101b96c: mov -0x38(%rbp),%r13
+0x00007fffe101b970: mov -0x40(%rbp),%rsi
+
+// ==========结束调用InterpreterMacroAssembler::unlock_object()函数生成如下的汇编代码============
+
+// 如果是其它的return指令，则由于之前通过push指令将结果保存在
+// 表达式栈上，所以现在可通过pop将表达式栈上的结果弹出到对应寄存器中
+
+
+// ----unlocked----
+// 在执行这里的代码时，表示当前的栈中没有相关的锁，也就是
+// 相关的锁对象已经全部释放
+
+// ----restart----
+// 检查一下，是否所有的锁都已经释放了
+
+// %rsi指向当前栈中最靠栈顶的BasicObjectLock
+0x00007fffe101b970: mov -0x40(%rbp),%rsi
+// %rbx指向当前栈中最靠栈底的BasicObjectLock
+0x00007fffe101b974: lea -0x40(%rbp),%rbx
+
+// 跳转到----entry----
+0x00007fffe101b978: jmpq 0x00007fffe101ba8b
+
+// ----exception----
+// Entry already locked, need to throw exception
+
+// 当throw_monitor_exception的值为true时，执行如下2个函数生成的汇编代码：
+// 执行call_VM()函数生成的汇编代码，就是调用C++函数InterpreterRuntime::throw_illegal_monitor_state_exception()
+// 执行should_not_reach_here()函数生成的汇编代码
+
+// 当throw_monitor_exception的值为false，执行如下汇编：
+// 执行调用InterpreterMacroAssembler::unlock_object()函数生成的汇编代码
+// install_monitor_exception的值为true时，执行call_VM()函数生成的汇编代码，就是调用C++函数InterpreterRuntime::new_illegal_monitor_state_exception()
+// 无条件跳转到----restart ----
+
+// ----loop----
+
+// 将BasicObjectLock::obj与NULL比较，如果不相等，则跳转到----exception----
+0x00007fffe101ba79: cmpq $0x0,0x8(%rsi)
+0x00007fffe101ba81: jne 0x00007fffe101b97d // 则跳转到----exception----
+
+// 0x10为BasicObjectLock，找到下一个BasicObjectLock
+0x00007fffe101ba87: add $0x10,%rsi
+
+// ----entry----
+// 检查是否到达了锁对象存储区域的底部
+0x00007fffe101ba8b: cmp %rbx,%rsi
+// 如果不相等，跳转到loop
+0x00007fffe101ba8e: jne 0x00007fffe101ba79 // 跳转到----loop----
+
+// ----no_unlock----
+
+// 省略jvmti support
+
+// 将-0x8(%rbp)处保存的old stack pointer(saved rsp)取出来放到%rbx中
+0x00007fffe101bac7: mov -0x8(%rbp),%rbx
+
+// 移除栈帧
+// leave指令相当于：
+// mov %rbp, %rsp
+// pop %rbp
+0x00007fffe101bacb: leaveq
+// 将返回地址弹出到%r13中
+0x00007fffe101bacc: pop %r13
+// 设置%rsp为调用者的栈顶值
+0x00007fffe101bace: mov %rbx,%rsp
+0x00007fffe101bad1: jmpq *%r13
+
+第37篇-恢复调用者栈帧例程Interpreter::_invoke_return_entry
+当控制权转移给调用者时，还需要恢复调用者的栈帧状态，如让%r13指向bcp、%r14指向局部变量表等，另外还需要弹出压入的实参、跳转到调用者的下一个字节码指令继续执行，而这一切操作都是由Interpreter::_return_entry例程负责的
+当传递的state为itos（也就是当方法的返回类型为int时）时生成的汇编代码如下:
+// 将-0x10(%rbp)存储到%rsp后，置空-0x10(%rbp)
+0x00007fffe1006ce0: mov -0x10(%rbp),%rsp // 更改rsp
+0x00007fffe1006ce4: movq $0x0,-0x10(%rbp) // 更改栈中特定位置的值
+// 恢复bcp和locals，使%r14指向本地变量表，%r13指向bcp
+0x00007fffe1006cec: mov -0x38(%rbp),%r13
+0x00007fffe1006cf0: mov -0x30(%rbp),%r14
+// 获取ConstantPoolCacheEntry的索引并加载到%ecx
+0x00007fffe1006cf4: movzwl 0x1(%r13),%ecx 
+ 
+// 获取栈中-0x28(%rbp)的ConstantPoolCache并加载到%ecx
+0x00007fffe1006cf9: mov -0x28(%rbp),%rbx 
+// shl是逻辑左移，获取字偏移
+0x00007fffe1006cfd: shl $0x2,%ecx 
+// 获取ConstantPoolCacheEntry中的_flags属性值
+0x00007fffe1006d00: mov 0x28(%rbx,%rcx,8),%ebx
+// 获取_flags中的低8位中保存的参数大小
+0x00007fffe1006d04: and $0xff,%ebx 
+ 
+// lea指令将地址加载到内存寄存器中，也就是恢复调用方法之前栈的样子
+0x00007fffe1006d0a: lea (%rsp,%rbx,8),%rsp 
+ 
+// 跳转到下一指令执行
+0x00007fffe1006d0e: movzbl 0x3(%r13),%ebx 
+0x00007fffe1006d13: add $0x3,%r13
+0x00007fffe1006d17: movabs $0x7ffff73b7ca0,%r10
+0x00007fffe1006d21: jmpq *(%r10,%rbx,8)
+
+第38篇-解释方法之间的调用小实例
