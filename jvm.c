@@ -74,8 +74,6 @@ typedef uint64_t julong;
 typedef intptr_t  intx;
 typedef uintptr_t uintx;
 
-#define offset_of(klass,field) (size_t)((intx)&(((klass*)16)->field) - 16)
-
 const int size_of_intx = sizeof(intx);
 const int size_of_ptr = sizeof(char*);
 
