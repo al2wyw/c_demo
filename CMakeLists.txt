@@ -17,4 +17,4 @@ add_executable(def def.c)
 
 add_definitions(-DCC_INTR)
 add_executable(branch branch.c)
-add_executable(size_demo size_demo.c jvm.c)
+add_executable(size_demo size_demo.c)
