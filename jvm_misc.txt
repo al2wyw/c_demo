@@ -1,0 +1,36 @@
+C++ 重载运算符在HotSpot VM中的应用
+内存分配与释放
+在C++中可以通过new运算符和delete运算符进行内存分配与释放，由于C++没有GC托管技术，所以内存申请和释放通常集中到一个地方管理，才会有Metaspace或Arena这些相对复杂一些的内存管理机制。
+在使用new关键字创建Klass或子类的实例时，都会调用Metaspace::allocate()函数从元数据区分配内存；在Klass类中，我们没有看到重载delete运算符，因为删除一个类并没有那么简单，需要借助GC来完成。
+
+句柄(Handle)
+句柄要间接操作实例，让GC能够集中扫描到栈中引用到的Java对象，句柄中重载了()、->和==运算符，大大简化了相关操作的简洁性，操作句柄就感觉和操作oop是一样的效果
+// 将对象封装为句柄
+Handle h1(obj1);
+// 获取被封装的对象，会调用到operator()()函数，这个函数返回*_handleoop
+obj2 = h1();
+// 直接调用oop中定义的相关函数，会调用到operator->()函数，在这个函数中
+// 获取_handle值后调用_handle->print()函数
+h1->print();
+
+C++指针和地址偏移在HotSpot VM中的应用
+operator new分配额外内存:
+我们可以自己写个operator new函数对标准库函数进行重载，通常会根据类信息分配出需要的内存大小，但是我们也可以多分配一些内存，然后在多分配出来的内存上存储一些额外定义的信息(参考例子)
+在HotSpot VM中也有这样的操作，例如Method，根据需要有两个可选择性的字段:
+Method
+native_function ptr
+signature_handler ptr
+当为native方法时，会为Method多开辟2个指针大小的存储空间
+
+address* native_function_addr() const {
+    assert(is_native(), "must be native");
+    return (address*) (this+1);
+}
+address* signature_handler_addr() const {
+    return native_function_addr() + 1;
+}
+注意这里的this+1，因为this的类型是Method实例，所以加1是增加一个Method对应的字节数，即获取Method对应内存区域的下一个字节的地址；
+第二个native_function_addr() + 1，因为native_function_addr()返回的就是一个指针类型的数据，所以这里的加1是增加指针对应的字节数，64位下是8字节
+
+offset_of宏的解析:
+参考例子
