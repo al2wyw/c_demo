@@ -1503,4 +1503,128 @@ struct JavaVM_ {
     ...
 }
 
+跳过，代码分析比较浅显
 第41篇-JNIEnv与JavaVM的初始化
+
+暂时跳过，后续返回阅读
+第42篇-JNI引用的管理（1）
+第43篇-JNI引用的管理（2）
+
+第44篇-为native方法生成解释执行入口
+在HotSpot VM中，Java方法调用native方法会有2个入口例程，一个为解释执行的入口例程，一个为“编译”执行的入口例程。
+所谓“编译”执行其实是如果一个native方法在解释模式被调用到了CompileThreshold次数之后，HotSpot VM会为该方法专门生成一个Native wrapper，将其方法属性、参数迁移之类的信息都固化进去，相比解释执行开销会小一些。
+Native wrapper生成好之后会保存到方法的Method::_from_compiled_entry属性中。
+
+InterpreterGenerator::generate_native_entry()函数生成解释执行的入口例程
+在调用generate_fixed_frame()方法之前，会额外开辟2个8字节的空间，分别用来存放result_handler和oop temp
+// 省略generate_fixed_frame()之前的汇编
+// 省略generate_fixed_frame()生成的汇编
+
+// 从栈帧中取出Method*存储到%rbx中
+0x00007fffe1014d87: mov -0x18(%rbp),%rbx 
+// 获取ConstMethod*存储到%r11中
+0x00007fffe1014d8b: mov 0x10(%rbx),%r11 
+// 将方法参数的大小放到%r11d中 
+0x00007fffe1014d8f: movzwl 0x2a(%r11),%r11d 
+// 将%r11d中的内容左移3位，也就是算出方法参数需要占用的字节数
+0x00007fffe1014d94: shl $0x3,%r11d 
+// 更新%rsp的值，为方法参数开辟存储参数的空间 
+0x00007fffe1014d98: sub %r11,%rsp 
+// 对linux系统来说不起作用 
+0x00007fffe1014d9b: sub $0x0,%rsp 
+// 必须是16字节边界（see amd64 ABI），System V / AMD64 ABI要求16字节堆栈对齐
+0x00007fffe1014d9f: and $0xfffffffffffffff0,%rsp
+
+// 将Method::signature_handler存储到%r11中
+0x00007fffe1014da3: mov 0x68(%rbx),%r11
+// 如果Method::signature_handler非空,则跳转到L1
+0x00007fffe1014da7: test %r11,%r11
+0x00007fffe1014daa: jne 0x00007fffe1014e40 
+
+// 执行到这里，说明Method::signature_handler属性的值为空，
+// 需要调用InterpreterRuntime::prepare_native_call()函数
+// 确保native方法已经绑定且安装了方法签名解析代码
+// 省略调用__call_VM()函数
+
+// 将Method*存储到%rbx中 
+0x00007fffe1014e38: mov -0x18(%rbp),%rbx
+// 将Method::signature_handler放到%11中
+0x00007fffe1014e3c: mov 0x68(%rbx),%r11 
+
+// **** L1 ****
+// 从这里开始执行如下的代码逻辑时，Method::signature_handler已经放到了%r11中
+
+// 调用Method::signature_handler函数
+0x00007fffe1014e40: callq *%r11 
+// 调用signature_handler，解析方法参数，整个
+// 过程一般不会改变rbx，但是慢速处理时可能导致GC，
+// 所以调用完成后最好重新获取Method
+0x00007fffe1014e43: mov -0x18(%rbp),%rbx
+// 将%rax中的result_handler存储到方法栈帧中，result_handler
+// 是执行signature_handler例程后的返回值，根据方法签名的返回类型获取的
+0x00007fffe1014e47: mov %rax,0x18(%rbp)
+
+// 将Method::access_flags存储到%r11d中
+0x00007fffe1014e4b: mov 0x28(%rbx),%r11d 
+// 判断是否为static本地方法，其中$0x8表示JVM_ACC_STATIC
+0x00007fffe1014e4f: test $0x8,%r11d 
+// 如果为0,表示是非static方法，要跳转到-- L2 --
+0x00007fffe1014e56: je 0x00007fffe1014e74 
+
+// 执行这里代码时，说明方法是static方法
+// 如下4个mov指令将通过Method->ConstMehod->ConstantPool->mirror
+// 获取到java.lang.Class的oop
+0x00007fffe1014e5c: mov 0x10(%rbx),%r11
+0x00007fffe1014e60: mov 0x8(%r11),%r11
+0x00007fffe1014e64: mov 0x20(%r11),%r11
+0x00007fffe1014e68: mov 0x70(%r11),%r11
+// 将mirror存储到栈帧中，也就是oop temp这个slot位置
+0x00007fffe1014e6c: mov %r11,0x10(%rbp)
+// 将mirror拷到%rsi中作为静态方法调用的第2个参数
+0x00007fffe1014e70: lea 0x10(%rbp),%rsi
+
+// **** L2 ****
+// 不管是静态还是非静态方法，都会执行如下的汇编片段
+
+// 获取Method::native_function的地址并存储到%rax中
+0x00007fffe1014e74: mov 0x60(%rbx),%rax 
+// %r11中存储的是SharedRuntime::native_method_throw_unsatisfied_link_error_entry()
+0x00007fffe1014e78: movabs $0x7ffff6a08f14,%r11 
+// 判断rax中的地址是否是native_method_throw_unsatisfied_link_error_entry的地址，如果是说明本地方法未绑定
+0x00007fffe1014e82: cmp %r11,%rax
+// 如果不等于，即native方法已经绑定，跳转到----L3----
+0x00007fffe1014e85: jne 0x00007fffe1014f1b 
+
+// 执行这里的代码，说明native方法没有绑定，
+// 调用InterpreterRuntime::prepare_native_call()函数重试，完成native方法绑定
+
+// 重新获取Method*到%rbx中
+0x00007fffe1014f13: mov -0x18(%rbp),%rbx 
+// 获取native_function的地址拷到%rax中
+0x00007fffe1014f17: mov 0x60(%rbx),%rax
+
+// **** L3 ****
+/ 将当前线程的JavaThread::jni_environment放入c_rarg0，也就是%rdi中
+0x00007fffe1014f1b: lea 0x210(%r15),%rdi
+
+// 将last_java_fp存储到JavaThread::JavaFrameAnchor::last_java_fp
+0x00007fffe1014f22: mov %rbp,0x200(%r15) 
+// 将last_java_pc存储到JavaThead::JavaFrameAnchor::last_java_pc
+0x00007fffe1014f29: movabs $0x7fffe1014f22,%r10 
+0x00007fffe1014f33: mov %r10,0x1f8(%r15) 
+// 将last_java_sp保存到JavaThead.JavaFrameAnchor.last_java_pc中
+0x00007fffe1014f3a: mov %rsp,0x1f0(%r15)
+
+// 将线程的状态改成_thread_in_native
+0x00007fffe1014f41: movl $0x4,0x288(%r15) 
+// 调用native_function本地函数
+0x00007fffe1014f4c: callq *%rax 
+
+// 方法调用结束校验或者恢复CPU控制状态
+0x00007fffe1014f4e: vzeroupper 
+// 如下4行代码是为了保存调用native_function函数后得到的结果，将
+// 结果存储到栈顶
+0x00007fffe1014f51: sub $0x10,%rsp
+0x00007fffe1014f55: vmovsd %xmm0,(%rsp)
+0x00007fffe1014f5a: sub $0x10,%rsp
+0x00007fffe1014f5e: mov %rax,(%rsp)
