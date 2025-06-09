@@ -1463,3 +1463,44 @@ BasicObjectLock中有2个属性，_lock(-0x50(%rbp))和_obj(-0x48(%rbp))，分�
 0x00007fffe1006d21: jmpq *(%r10,%rbx,8)
 
 第38篇-解释方法之间的调用小实例
+空白
+
+第39篇-Java通过JNI调用C/C++函数
+Java语言需要通过调用C/C++函数来实现某些功能，因为Java有时候对这些功能显的无能为力，
+如想使用X86_64 的 SIMD 指令提升一下业务方法中关键代码的性能，又或者想要获取某个体系架构或者操作系统特有功能的支持
+
+在对同步方法进行处理时，generate_normal_entry()函数中调用lock_method()函数生成例程，这个例程会对Java方法加锁而没有对应的释放锁逻辑，
+因为dispatch_next()函数执行字节码指令时，一些字节码如return、athrow在移除栈帧的时候会有释放锁的操作，所以无须生成释放锁的逻辑，
+但是generate_native_entry()函数生成的例程没有执行字节码指令，它必须在执行完native方法之后检查是否需要执行释放锁操作
+
+JNI牺牲了可移植性，需要为不同平台生成动态链接库，另外在使用JNI机制开发时，还有一些缺点，如下：
+从 Java 环境到 native code 的上下文切换耗时、低效；
+JNI 编程，如果操作不当，可能引起 Java 虚拟机的崩溃；
+JNI 编程，如果操作不当，可能引起内存泄漏。
+
+本地函数的第一个参数JNIEnv接口指针，指向一个函数表，函数表中的每一个入口指向一个JNI函数。
+本地函数经常通过这些函数来访问HotSpot中的数据结构，如堆中的oop等。
+
+第40篇-JNIEnv和JavaVM
+JNIEnv一般是是由虚拟机传入，而且与线程相关的变量，不是线程安全的:
+struct JNIEnv_ {
+    const struct JNINativeInterface_ *functions;
+    ...
+}
+JNINativeInterface_定义了很多函数指针，指向对应的函数方法
+struct JNINativeInterface_ {
+    Java中的Class类相关的函数方法
+    引用ref相关的函数方法
+    获取jfieldID和jmethodID的函数方法
+    ...
+}
+
+JavaVM是虚拟机在JNI中的表示，一个JVM中只有一个JavaVM实例，这个实例是线程共享的:
+通过JNIEnv可以获取一个Java虚拟机实例: jint GetJavaVM(JNIEnv *env, JavaVM **vm)
+
+struct JavaVM_ {
+    const struct JNIInvokeInterface_ *functions;
+    ...
+}
+
+第41篇-JNIEnv与JavaVM的初始化
