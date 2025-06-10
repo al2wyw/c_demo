@@ -1,0 +1,36 @@
+call_VM routine:
+
+setup args to rdi rsi etc.
+save bcp to stack
+save rsp rbp to thread
+
+call jvm native address (save res to thread)
+
+clear rsp rbp from thread
+check pending exceptions
+
+move res from thread to rax
+clear res from thread
+
+move bcp local from stack to reg
+
+invoke_virtual routine:
+
+setup args to stack by other inst
+
+push invoke_return_entry address
+test receiver
+save rsp to stack
+
+find method target via vtable (optional)
+jmp _from_interpretered_entry address:
+    leaveq by return inst (mov rbp to rsp, pop rbp)
+
+jmp invoke_return_entry address:
+    move bcp local from stack to reg
+    add (args num)*8 to rsp
+    jmp next bcp address
+
+invoke_native routine:
+
+
