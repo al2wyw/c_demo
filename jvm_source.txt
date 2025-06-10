@@ -1628,3 +1628,260 @@ InterpreterGenerator::generate_native_entry()函数生成解释执行的入口�
 0x00007fffe1014f55: vmovsd %xmm0,(%rsp)
 0x00007fffe1014f5a: sub $0x10,%rsp
 0x00007fffe1014f5e: mov %rax,(%rsp)
+
+// 改变线程的状态为_thread_in_native_trans
+0x00007fffe1014f62: movl $0x5,0x288(%r15)
+
+// 调用MacroAssembler::serialize_memory()函数
+0x00007fffe1014f6d: mov %r15d,%r11d
+0x00007fffe1014f70: shr $0x4,%r11d
+0x00007fffe1014f74: and $0xffc,%r11d
+0x00007fffe1014f7b: movabs $0x7ffff7ff5000,%r10
+// 结束MacroAssembler::serialize_memory()函数
+
+// check for safepoint operation in progress and/or pending suspend requests
+// 判断安全点的状态是否为_not_synchronized
+0x00007fffe1014f85: mov %r11d,(%r10,%r11,1)
+0x00007fffe1014f89: cmpl $0x0,0x1639454d(%rip) # 0x00007ffff73a94e0
+// 如果不相等，则处于安全点，跳转到---- L ----
+0x00007fffe1014f93: jne 0x00007fffe1014fa7 
+
+// 判断当前线程的suspend_flags是否为0，如果
+// 是0则跳转到---- Continue ----，表示没有未处理的异常
+0x00007fffe1014f99: cmpl $0x0,0x30(%r15)
+0x00007fffe1014fa1: je 0x00007fffe1014fbd
+
+// **** L ****
+// 执行这里汇编时，说明处于安全点并且有未处理的异常
+
+// 将JavaThread存储到c_rarg0中
+0x00007fffe1014fa7: mov %r15,%rdi 
+// 临时将%rsp存储到%r12中
+0x00007fffe1014faa: mov %rsp,%r12 
+// linux下不起作用
+0x00007fffe1014fad: sub $0x0,%rsp 
+// 栈按16字节对齐
+0x00007fffe1014fb1: and $0xfffffffffffffff0,%rsp 
+// 调用JavaThread::check_special_condition_for_native_trans()函数
+0x00007fffe1014fb5: callq 0x00007ffff6aaf360
+// 恢复%rsp 
+0x00007fffe1014fba: mov %r12,%rsp 
+
+
+// **** Continue ****
+// 线程状态调整为_thread_in_Java，表示running in Java or in stub code
+0x00007fffe1014fbd: movl $0x8,0x288(%r15) 
+
+// 如下汇编清空JavaThead::JavaFrameAnchor::last_java_fp、last_java_sp与last_java_pc
+0x00007fffe1014fc8: movabs $0x0,%r10
+0x00007fffe1014fd2: mov %r10,0x1f0(%r15)
+0x00007fffe1014fd9: movabs $0x0,%r10
+0x00007fffe1014fe3: mov %r10,0x200(%r15)
+0x00007fffe1014fea: movabs $0x0,%r10
+0x00007fffe1014ff4: mov %r10,0x1f8(%r15)
+
+// 将JavaThread::active_handles（类型为JNIHandleBlock）存储到%r11中
+0x00007fffe1014ffb: mov 0x38(%r15),%r11
+// 将JavaThread::active_handles::_top属性置为NULL
+0x00007fffe1014fff: movq $0x0,0x108(%r11)
+// 这里释放掉了整个JavaThread::active_handles保存的单链接JNIHandleBlock中的所有句柄了，因为第1个JNIHandleBlock的_top属性已经为0。这样的操作会让本地函数的局部对象引用全部变为无效状态
+
+// If result is an oop unbox and store it in frame where gc will see it
+// and result handler will pick it up
+// 从AbstractInterpreter::_native_abi_to_tosca数组中获取对应返回类型的result_handler
+0x00007fffe101500a: movabs $0x7fffe100ecdb,%r11
+
+// 比较方法的结果处理程序result_handler是否是T_OBJECT类型的
+0x00007fffe1015014: cmp 0x18(%rbp),%r11
+
+// 如果不是则跳转到----no_oop----
+0x00007fffe1015018: jne 0x00007fffe101503e
+// 如果是，先把栈顶的long类型的数据，即oop地址pop出来放到rax中
+0x00007fffe101501e: mov (%rsp),%rax
+0x00007fffe1015022: add $0x10,%rsp
+0x00007fffe1015026: test %rax,%rax
+
+// 如果为0,跳转到----store_result----
+0x00007fffe1015029: je 0x00007fffe1015032 
+// 如果不为0,那么就表示有返回的oop，注意这里的操作，因为本地函数返回的
+// 是句柄，所以要从句柄中获取到真正的oop地址
+0x00007fffe101502f: mov (%rax),%rax
+
+// **** store_result ****
+
+// 将%rax中的值存储到栈的oop tmp中
+0x00007fffe1015032: mov %rax,0x10(%rbp) 
+0x00007fffe1015036: sub $0x10,%rsp
+// 重新将%rax中的oop放到栈顶 
+0x00007fffe101503a: mov %rax,(%rsp) 
+
+// **** no_oop ****
+// 判断当前线程的_stack_guard_state属性是否是stack_guard_yellow_disabled，即是否发生了stack overflow
+0x00007fffe101503e: cmpl $0x1,0x2b4(%r15)
+// 如果不等于，即没有发生stack overflow，则跳转到-- no_reguard --
+0x00007fffe1015049: jne 0x00007fffe1015109
+
+// 如果发生stack overflow，则调用reguard_yellow_pages做必要的处理
+//...
+
+// **** no_guard ****
+// 重新加载Method
+0x00007fffe1015109: mov -0x18(%rbp),%rbx
+0x00007fffe101510d: mov 0x10(%rbx),%r13
+// 获取ConstMethod::code的地址存储到%r13中
+0x00007fffe1015111: lea 0x30(%r13),%r13
+
+// 判断当前线程的_pending_exception属性是否为空，即是否发生了异常
+0x00007fffe1015115: cmpq $0x0,0x8(%r15)
+// 如果不为空，即没有异常，跳转到-- L --
+0x00007fffe101511d: je 0x00007fffe101521f
+
+// 当前线程的_pending_exception属性不为空，表示发生了异常
+// 省略调用__ MacroAssembler::call_VM()函数生成例程来调用InterpreterRuntime::throw_pending_exception()函数
+// 省略调用__ should_not_reach_here()生成的汇编
+
+// **** L ****
+// 判断目标方法是否是SYNCHRONIZED方法，如果是则需要解锁，如果不是则跳转到----L---- 
+0x00007fffe101521f: mov 0x28(%rbx),%r11d
+0x00007fffe1015223: test $0x20,%r11d
+// 不需要解锁时直接跳转即可
+0x00007fffe101522a: je 0x00007fffe1015405 
+// 获取偏向锁BasicObjectLock的地址，存储到c_rarg1中
+0x00007fffe1015230: lea -0x50(%rbp),%rsi
+// 获取偏向锁的_obj属性的地址
+0x00007fffe1015234: mov 0x8(%rsi),%r11 
+0x00007fffe1015238: test %r11,%r11
+// 判断_obj属性是否为空，如果不为空即未解锁，跳转到unlock完成解锁
+0x00007fffe101523b: jne 0x00007fffe101533d
+
+// 如果已解锁，说明锁的状态有问题，抛出异常
+// 省略调用__ MacroAssembler::call_VM()函数生成的例程，这个例程用来调用InterpreterRuntime::throw_illegal_monitor_state_exception()函数
+// 省略调用__ should_not_reach_here()生成的汇编
+
+// 调用InterpreterMacroAssembler::unlock_object()函数 
+// 将bcp保存到栈帧中
+0x00007fffe101533d: mov %r13,-0x38(%rbp) 
+// %rsi中存储的是BasicObjectLock，将BasicLock存储到%rax
+0x00007fffe1015341: lea (%rsi),%rax 
+0x00007fffe1015344: mov 0x8(%rsi),%rcx // 将_obj存储到%rcx中
+0x00007fffe1015348: movq $0x0,0x8(%rsi) // 释放_obj属性
+// 将_obj的markOop存储到%rdx中
+0x00007fffe1015350: mov (%rcx),%rdx 
+0x00007fffe1015353: and $0x7,%rdx 
+0x00007fffe1015357: cmp $0x5,%rdx
+// 如果已经是偏向状态，则跳转
+0x00007fffe101535b: je 0x00007fffe1015401 
+
+// 不为偏向状态
+// 将BasicLock中的markOop存储到%rdx中
+0x00007fffe1015361: mov (%rax),%rdx
+0x00007fffe1015364: test %rdx,%rdx
+// 如果为0,说明是锁的重入，跳转
+0x00007fffe1015367: je 0x00007fffe1015401 
+// 原子交换回原markOop，其中的%rdx中存储的就是old markOop，而%rcx中存储的是_obj
+0x00007fffe101536d: lock cmpxchg %rdx,(%rcx) 
+// 如果为0,说明是锁的重入，跳转
+0x00007fffe1015372: je 0x00007fffe1015401 
+// 执行这个汇编，说明为非锁重入
+0x00007fffe1015378: mov %rcx,0x8(%rsi) // restore obj
+
+// 省略调用call_VM()函数来调用InterpreterRuntime::monitorexit()函数
+
+// 恢复bcp
+0x00007fffe1015401: mov -0x38(%rbp),%r13 
+// 结束unlock_object()函数
+
+// 省略调用notify_method_exit()生成的汇编
+
+// restore potential result in edx:eax(表示64位数), call result handler to
+// restore potential result in ST0 & handle result
+// 将栈顶的代表方法调用结果的数据pop到%rax中
+
+0x00007fffe101543c: mov (%rsp),%rax
+0x00007fffe1015440: add $0x10,%rsp
+0x00007fffe1015444: vmovsd (%rsp),%xmm0
+0x00007fffe1015449: add $0x10,%rsp
+// 获取result_handler存储到%r11中
+0x00007fffe101544d: mov 0x18(%rbp),%r11
+// 调用result_handler处理方法调用结果
+0x00007fffe1015451: callq *%r11 
+
+// 获取sender sp，开始恢复上一个Java栈帧
+0x00007fffe1015454: mov -0x8(%rbp),%r11 
+// 相当于指令mov %ebp,%esp和pop %ebp
+0x00007fffe1015458: leaveq 
+// 获取return address
+0x00007fffe1015459: pop %rdi 
+// 设置sender sp
+0x00007fffe101545a: mov %r11,%rsp 
+// 跳转到返回地址处继续执行 
+0x00007fffe101545d: jmpq *%rdi
+
+第45篇-查找native方法的本地实现函数native_function
+通过JNI_OnLoad()函数执行的时候调用了RegisterNatives()函数注册了函数地址信息
+static JNINativeMethod method = { // 本地方法描述
+    "getName", // Java方法名
+    "(I)Ljava/lang/String;", // Java方法签名
+    (void*) getName // 绑定到对应的本地函数
+};
+
+static bool bindNative(JNIEnv *env) {
+    jclass clazz;
+    clazz = env->FindClass(CLASS_NAME);
+    if(clazz == NULL) {
+        return false;
+    }
+    return env->RegisterNatives(clazz, &method, 1) == 0;
+}
+
+通过InterpreterRuntime::prepare_native_call()函数为Method::native_function赋值:
+InterpreterRuntime::prepare_native_call()
+NativeLookup::lookup()
+NativeLookup::lookup_entry()
+NativeLookup::lookup_style()
+
+NativeLookup::lookup_entry() 会进行4次lookup_style:
+其实对linux来说，第1次和第3次的查找逻辑一样，第2次和第4次的查找逻辑一样，所以我们只看第1次和第2次的查找逻辑即可。
+第1次: pure_jni_name()函数拼接出来的函数名称是“Java_Java程序的package路径_函数名”
+如果有重载的native方法，那么按第1次查找时生成的函数名称是无法查找到的，还需要在生成的函数名称中加上参数相关信息
+第2次: long_jni_name()函数拼接出来的函数名称带参数类型
+
+address NativeLookup::lookup_style(){
+  Handle loader(THREAD, method->method_holder()->class_loader());
+  // 当loader为NULL时，表示method所属的类是通过系统类加载器加载的
+  if (loader.is_null()) {
+    // 如果是查找registerNatives()函数，则直接返回实现函数的地址
+    entry = lookup_special_native(jni_name);
+    if (entry == NULL) {
+       // 查找本地动态链接库,Linux下则是libjava.so
+       void* tmp = os::native_java_library();
+       // 找到本地动态链接库，调用os::dll_lookup查找符号表
+       entry = (address) os::dll_lookup(tmp, jni_name);
+    }
+    if (entry != NULL) {
+      in_base_library = true;
+      return entry;
+    }
+  }
+  // 省略调用java.lang.ClassLoader中的findNative()方法查找
+
+  if (entry == NULL) {
+      // findNative didn't find it, if there are any agent libraries look in them
+      AgentLibrary* agent;
+      for (agent = Arguments::agents(); agent != NULL; agent = agent->next()) {
+        // 找到本地动态链接库，调用os::dll_lookup查找符号表
+        entry = (address) os::dll_lookup(agent->os_lib(), jni_name);
+        if (entry != NULL) {
+          return entry;
+        }
+      }
+  }
+}
+我们可以从3个地方来查找动态链接库:
+（1）如果native方法所属的类是系统类加载器加载的，那么系统类加载器中的native方法的本地函数实现一般会在libjava.so中。
+（2）如果在libjava.so中没有找到，则调用java.lang.ClassLoader.findNative()方法进行查找。调用java.lang.ClassLoader.findNative()方法能够查找到用户自己创建出的动态链接库，
+    如我们编写native方法时，通常会通过System.load()或System.loadLibrary()方法加载动态链接库，这2个方法最终会调用到ClassLoader.loadLibrary()方法将相关的动态链接库保存下来供findNative()方法查找；
+（3）如果步骤1和步骤2都没有找到，则从加载的代理库中查找，如我们在虚拟机启动时配置的-agentlib或attach到目标进程后发送load命令加载的动态链接库都有可以包含本地函数的实现
+
+第46篇-signature_handler与result_handler
+
