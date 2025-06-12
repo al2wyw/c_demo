@@ -37,7 +37,7 @@
  * cmov: cmovg S D -> D = S when comp is greater
  *
  * 开启优化-O后非常随意，直接把调用者保护寄存器的值保存到其他的寄存器里而不是内存
- * gdb: b main; r; si; ni; x/nfu $rbp-4 f=o,x,u,s,i u=b,h,w,g; disass; layout;
+ * gdb: b main; r; si; ni; x/nfu $rbp-4 f=o,x,u,s,i u=b,h,w,g; disass; layout; info reg/fun xxxx
  * 位数操作 rax 64 eax 32 ax(ah 8 al 8) 16 / movq 64 movl 32 movw 16 movb 8
  * eflags的低8bit(7 -> 0): sf zf 0 af 0 pf 1 cf
  * ZF零标识: 算术或位逻辑运算结果为0,则ZF值为1,否则为0(test和comp只影响标志位)

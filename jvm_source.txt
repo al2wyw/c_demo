@@ -2011,6 +2011,95 @@ case T_OBJECT : move oop temp from stack to rax
 
 第51篇-SharedRuntime::generate_native_wrapper()生成编译入口
 当统计到一个native方法被调用足够多次之后，HotSpot VM会为它专门生成编译执行的入口例程。这个入口例程的目的与生成解释执行的入口例程一样，都是因为调用约定不同，所以要进行栈帧布局和转换。
-
+todo
 
 第52篇-即时编译器
+参考pdf
+
+53~60
+todo
+
+第61篇-安装与卸载编译方法和OSR
+调用compile_java_method()函数编译，这个函数是C1编译器或C2编译器的入口方法，编译完成后调用install_code()函数“安装”代码,
+也就是调用ciEnv中的register_method()函数注册编译的方法（热点代码块也是以方法为单位编译的）:
+  nm = nmethod::new_nmethod(...)
+  //如果是非栈上替换
+  if (entry_bci == InvocationEntryBci) {
+    if (TieredCompilation) {
+      // 如果有之前安装的版本，设置为不可用
+      nmethod* old = method->code();
+      if (old != NULL) {
+        old->make_not_entrant();
+      }
+    }
+    // nmethod安装到Method上，安装完成可以立即执行
+    method->set_code(method, nm);
+  } else { // 如果是栈上替换
+    // 将其添加到Klass的osr_nmethods链表上
+    method->method_holder()->add_osr_nmethod(nm);
+  }
+一般一个类被加载进来之后，里面的方法最早也要到它即将第一次被执行的时候才有可能被JIT编译器所编译。在那之前_code都是null
+编译方法的安装与卸载
+Method::set_code()
+Method::clear_code()
+栈上替换的安装与卸载
+InstanceKlass::add_osr_nmethod()
+InstanceKlass::remove_osr_nmethod()
+当nmethod被标记成not_entrant或者zombie时，或者执行CodeCache垃圾回收时会调用卸载函数
+
+第62篇-解释器与编译器适配
+从adapter中调用get_i2c_entry()或get_c2i_entry()函数就可以在解释执行和编译执行之间进行适配，因为解释执行和编译执行的调用约定（calling convention）不同，所以要进行适配
+
+// 需要进行类检测的入口
+address           _entry_point; 
+// 没有类检查的入口
+address           _verified_entry_point;
+每个Method有两个实际入口，一个是unverified entry point（UEP），用于实现虚方法分派的monomorphic inline cache；另一个是verified entry point（VEP），是方法的真正入口。
+只有需要虚方法分派的方法才会有独立的UEP；对静态方法、私有成员方法之类的Java方法，UEP与VEP实际上在同一个位置，后面还会详细介绍UEP与VEP
+
+AdapterHandlerEntry* AdapterHandlerLibrary::get_adapter(methodHandle method) {
+    int total_args_passed = method->size_of_parameters();
+ 
+    // 宏扩展后为：(BasicType*) resource_allocate_bytes( (total_args_passed) * sizeof(BasicType) )
+    // BasicType为枚举类型，在之前介绍调用约定时详细介绍过
+    BasicType* sig_bt = NEW_RESOURCE_ARRAY(BasicType, total_args_passed);
+    // 宏扩展后为：(VMRegPair*) resource_allocate_bytes( (total_args_passed) * sizeof(VMRegPair) )
+    VMRegPair* regs = NEW_RESOURCE_ARRAY(VMRegPair, total_args_passed);
+ 
+    int i = 0;
+    if (!method->is_static()){ 
+      sig_bt[i++] = T_OBJECT; // 实例方法传递的第一个参数为this指针
+    }
+ 
+    for (SignatureStream ss(method->signature()); !ss.at_return_type(); ss.next()) {
+      sig_bt[i++] = ss.type(); 
+      if (ss.type() == T_LONG || ss.type() == T_DOUBLE){
+        sig_bt[i++] = T_VOID; // 对于Long和Double类型来说，占用2个slot
+      }
+    }
+    assert(i == total_args_passed, "");
+    // 针对不同的方法签名生成不同的AdapterHandlerEntry，所以需要一个AdapterHandlerTable容器来存储
+    // 这样，相同的方法签名就可以重用AdapterHandlerEntry，如果查找了，直接返回就可以
+    entry = _adapters->lookup(total_args_passed, sig_bt);
+    if (entry != NULL) {
+      return entry;
+    }
+ 
+    // 根据java编译执行的调用约定计算出需要通过栈来传递的参数的栈大小
+    int comp_args_on_stack = SharedRuntime::java_calling_convention(sig_bt, regs, total_args_passed, false);
+ 
+    fingerprint = new AdapterFingerPrint(total_args_passed, sig_bt);
+
+    entry = SharedRuntime::generate_i2c2i_adapters(
+                   &_masm,
+                   total_args_passed,
+                   comp_args_on_stack,
+                   sig_bt,
+                   regs,
+                   fingerprint
+                  );
+
+    _adapters->add(entry);
+}
+
+第63篇-解释器与编译器适配之SharedRuntime::gen_i2c_adapter()函数

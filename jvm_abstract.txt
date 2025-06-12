@@ -39,7 +39,7 @@ invoke_native routine:
 
 setup args to stack by other inst
 
-sub (args num)*8 from rsp ???
+sub (args num)*8 from rsp ??? (只用到了栈顶的内存)
 stack mem alignment
 
 call Method::signature_handler (return result_handler)
