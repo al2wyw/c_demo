@@ -1884,4 +1884,101 @@ address NativeLookup::lookup_style(){
 （3）如果步骤1和步骤2都没有找到，则从加载的代理库中查找，如我们在虚拟机启动时配置的-agentlib或attach到目标进程后发送load命令加载的动态链接库都有可以包含本地函数的实现
 
 第46篇-signature_handler与result_handler
+Method实例的第2个额外slot的signature_handler指向的例程用来消除Java解释器栈和C/C++栈调用约定的不同，将位于解析器栈中的参数适配到本地函数使用的C栈
+
+// 根据方法签名解析方法参数的解析器，当方法参数大小小于Fingerprinter::max_size_of_parameters
+// 时可以生成并使用根据方法签名定制的快速的解析器，否则使用通用的相对较慢的解析器。
+void SignatureHandlerLibrary::add(methodHandle method) {
+  // 只有在signature_handler的值为NULL时才会执行如下逻辑，否则不做任何操作
+  if (method->signature_handler() == NULL) {
+    int handler_index = -1;
+    // UseFastSignatureHandlers的值默认为true
+    // Fingerprinter::max_size_of_parameters的值为13,也就是13个字节
+    if (UseFastSignatureHandlers && method->size_of_parameters() <= Fingerprinter::max_size_of_parameters) {
+      MutexLocker mu(SignatureHandlerLibrary_lock);
+      // 确保使用到的相关变量都已经初始化完成
+      initialize();
+      // lookup method signature's fingerprint
+      // 读出Method::_constMethod::_fingerprinter的值，也就是
+      // 根据方法签名得到对应的指纹值，然后在_fingerprints数组中查找到
+      // 句柄下标索引，由于句柄存储在_handlers数组中，所以可以根据这个下标
+      // 索引从_handlers数组中获取
+      uint64_t fingerprint = Fingerprinter(method).fingerprint();
+      handler_index = _fingerprints->find(fingerprint);
+      // 如果handler_index小于0,则说明没有这个方法签名对应的signature_handler，需要创建一个新的
+      // signature_handler
+      if (handler_index < 0) {
+        ResourceMark rm;
+        ptrdiff_t align_offset = (address)round_to((intptr_t)_buffer, CodeEntryAlignment) - (address)_buffer;
+ 
+        CodeBuffer buffer(
+                 (address)(_buffer + align_offset),
+                 SignatureHandlerLibrary::buffer_size - align_offset
+               );
+        // 生成signature_handler，其实就是生成一段例程，这段例程可消除Java解释器栈
+        // 和C/C++栈调用约定的不同，将位于解析器栈中的参数适配到本地函数使用的C栈
+        InterpreterRuntime::SignatureHandlerGenerator tmp = InterpreterRuntime::SignatureHandlerGenerator(method, &buffer);
+        tmp.generate(fingerprint);
+        // signature_handler对应的例程临时保存在了CodeBuffer中，调用set_handler保存到BufferBlob中，
+        // 这个BufferBlob中的内存是从CodeCache中分配出来的，解释执行所需要的所有例程基本都保存在CodeCache中
+        address handler = set_handler(&buffer);
+        if (handler == NULL) {
+          // 使用普通的、相对较慢的解释器
+        } else {
+          // 向_fingerprints和_handlers数组中添加方法签名和signature_handler，这样下次就可以
+          // 根据方法签名快速定位对应的signature_handler
+          _fingerprints->append(fingerprint);
+          _handlers->append(handler);
+          handler_index = _fingerprints->length() - 1;
+        }
+      } // 结束 if (handler_index < 0)
+ 
+      if (handler_index < 0) {
+      // 使用通用的相对较慢的解析器
+      address tmp = Interpreter::slow_signature_handler();
+      method->set_signature_handler(tmp);
+       } else {
+      // 使用快速的解析器
+      address tmp = _handlers->at(handler_index);
+      method->set_signature_handler(tmp);
+       }
+    } else {
+      // 没有快速的解释器，只能使用相对较慢的普通解释器
+      method->set_signature_handler(Interpreter::slow_signature_handler());
+    }
+  }
+}
+对于参数不超过13个slot大小（int、byte、对象地址等占用一个slot，而double和long占用2个slot）的native方法来说，signature_handler会走快速路径
+就是根据方法签名字符串得到一个64位的整数方法指纹（Method Fingerprint）值，后续signature_handler将直接用方法指纹值来解析参数。
+方法指纹值都会存储在元素类型为uint64_t的数组中，所以方法指纹值不能超过64位大小，另外加上还需要存储结果类型、是否为静态方法等信息，
+所以能表示方法参数类型的参数存储区只有52位大小，所以才会要求方法参数大小不超过13个slot的大小（每个参数的类型存储需要占用4位）。-XX:+PrintSignatureHandlers
+
+注意解释执行栈Java方法的参数是从左向右入栈，而C/C++栈的参数是从右向左入栈
+
+快速签名解析器
+InterpreterRuntime::SignatureHandlerGenerator::generate()
+SignatureIterator::iterate()
+SignatureIterator::iterate_parameters()
+    do_long()/do_object()/do_int()...
+        pass_long()/pass_object()/pass_int()
+
+void do_long(){ pass_long(); _jni_offset++; _offset += 2; }
+其中的_jni_offset表示参数对于本地函数的偏移量，而_offset表示参数对于Java方法的偏移量。
+对于Java方法来说，一个long或double会占用2个slot，而在64位下，本地函数只需要一个slot即可。
+pass_long()可以看到C/C++参数传递规则
+
+普通的签名解析器
+AbstractInterpreterGenerator::generate_slow_signature_handler()
+// %rcx指向了栈顶，其中的栈顶值是第1个需要通过栈来给本地函数传递的参数
+0x00007fffe1005400: mov %rsp,%rcx // 为调用准备c_rarg3
+// 0x70=14*wordSize，其中wordSize=8，这里又从native栈帧上开辟了
+// 14个slot，其中8个用来存储浮点数，5个用来存储整数，1个用来指示8个slot
+// 中，哪些存储了需要传递的方法参数，也就是需要传递给本地函数的浮点数
+0x00007fffe1005403: sub $0x70,%rsp
+//省略调用call_VM()函数生成的例程，这个例程调用InterpreterRuntime::slow_signature_handler()函数
+
+// rax: result handler
+// Do FP first so we can use c_rarg3 as temp
+// 0x28等于5*wordSize
+0x00007fffe1005492: mov 0x28(%rsp),%ecx // float/double identifiers
 

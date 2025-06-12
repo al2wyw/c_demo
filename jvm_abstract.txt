@@ -18,7 +18,11 @@ invoke_virtual routine:
 
 setup args to stack by other inst
 
+sub (locals num - args num)*8 from rsp
+
 push invoke_return_entry address
+resolve method and class (optional)
+get receiver from cp cache
 test receiver
 save rsp to stack
 
@@ -33,4 +37,29 @@ jmp invoke_return_entry address:
 
 invoke_native routine:
 
+setup args to stack by other inst
 
+sub (args num)*8 from rsp ???
+stack mem alignment
+
+call Method::signature_handler (return result_handler)
+move result_handler from rax to stack(result handler)
+get receiver from cp cache
+move receiver from r11 to stack(oop temp)
+
+move JavaThread::jni_environment to rdi
+save rsp rbp last_pc to thread
+move _thread_in_native to thread
+call Method::native_function
+
+push rax
+move _thread_in_native_trans to thread
+serialize_memory ???
+
+check safe point and pending exception
+
+move _thread_in_Java to thread
+clear rsp rbp last_pc from thread
+clear JavaThread::active_handles::_top
+
+...
