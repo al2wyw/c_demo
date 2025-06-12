@@ -1884,6 +1884,7 @@ address NativeLookup::lookup_style(){
 （3）如果步骤1和步骤2都没有找到，则从加载的代理库中查找，如我们在虚拟机启动时配置的-agentlib或attach到目标进程后发送load命令加载的动态链接库都有可以包含本地函数的实现
 
 第46篇-signature_handler与result_handler
+signature_handler:
 Method实例的第2个额外slot的signature_handler指向的例程用来消除Java解释器栈和C/C++栈调用约定的不同，将位于解析器栈中的参数适配到本地函数使用的C栈
 
 // 根据方法签名解析方法参数的解析器，当方法参数大小小于Fingerprinter::max_size_of_parameters
@@ -1964,7 +1965,7 @@ SignatureIterator::iterate_parameters()
 
 void do_long(){ pass_long(); _jni_offset++; _offset += 2; }
 其中的_jni_offset表示参数对于本地函数的偏移量，而_offset表示参数对于Java方法的偏移量。
-对于Java方法来说，一个long或double会占用2个slot，而在64位下，本地函数只需要一个slot即可。
+对于Java方法来说，一个long或double会占用2个slot，而在64位下，本地函数只需要一个slot即可。一个slot占用一个wordSize。
 pass_long()可以看到C/C++参数传递规则
 
 普通的签名解析器
@@ -1972,8 +1973,7 @@ AbstractInterpreterGenerator::generate_slow_signature_handler()
 // %rcx指向了栈顶，其中的栈顶值是第1个需要通过栈来给本地函数传递的参数
 0x00007fffe1005400: mov %rsp,%rcx // 为调用准备c_rarg3
 // 0x70=14*wordSize，其中wordSize=8，这里又从native栈帧上开辟了
-// 14个slot，其中8个用来存储浮点数，5个用来存储整数，1个用来指示8个slot
-// 中，哪些存储了需要传递的方法参数，也就是需要传递给本地函数的浮点数
+// 14个slot，其中8个用来存储浮点数，5个用来存储整数，1个用来存储float/double identifiers
 0x00007fffe1005403: sub $0x70,%rsp
 //省略调用call_VM()函数生成的例程，这个例程调用InterpreterRuntime::slow_signature_handler()函数
 
@@ -1982,3 +1982,35 @@ AbstractInterpreterGenerator::generate_slow_signature_handler()
 // 0x28等于5*wordSize
 0x00007fffe1005492: mov 0x28(%rsp),%ecx // float/double identifiers
 
+//我们暂时将需要通过寄存器传递的参数保存到新开辟过的14个slot中，而需要通过栈传递的参数放到param n ... param 1区域中即可
+//省略把参数移动到14个slot的汇编代码，其中的%ecx中存储的是float/double identifiers，这是一个组合数字，
+//指明8个浮点数slot中，哪些存储了float值，哪些存储了double值，然后分别使用vmovss和vmovsd移动到对应的寄存器中
+
+// 恢复%rsp，0x70=14*wordSize
+0x00007fffe10055a0: add $0x70,%rsp
+0x00007fffe10055a4: retq
+
+result_handler:
+Interpreter::_native_abi_to_tosca[x] = generate_result_handler_for(type)
+case T_OBJECT : move oop temp from stack to rax
+
+47~49 空白
+第47篇-解释执行的Java方法调用native方法小实例
+第48篇-native方法调用解释执行的Java方法
+第49篇-函数（方法）调用约定
+
+第50篇-调用约定在HotSpot VM中的实现
+当需要编译执行Java方法时，会调用SharedRuntime::java_calling_convention()函数
+
+我们看到了这个类(VMRegPair)中定义了_first和_second这一对寄存器，这主要是为32位实现考虑的，因为32位在传递long或double类型的参数时，需要2个寄存器来完成，一个存储高32位，一个存储低32位。对于64位来说，通过只使用_first寄存器就可完成任务。
+当_first的值小于32，表示使用通用寄存器来传递参数
+当_first的值大于等于48，小于184，表示使用浮点寄存器来传递参数
+当_first的值大于等于184时，表示对应的参数需要通过栈来传递
+
+当需要执行native方法时，会调用SharedRuntime::c_calling_convention()函数
+
+第51篇-SharedRuntime::generate_native_wrapper()生成编译入口
+当统计到一个native方法被调用足够多次之后，HotSpot VM会为它专门生成编译执行的入口例程。这个入口例程的目的与生成解释执行的入口例程一样，都是因为调用约定不同，所以要进行栈帧布局和转换。
+
+
+第52篇-即时编译器
