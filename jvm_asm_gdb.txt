@@ -1,0 +1,25 @@
+p/x InterpreterRuntime::method((JavaThread*)$r15)   在汇编执行时获取当前方法
+x/16s InterpreterRuntime::method(thread)->name()->base() 显示当前方法的名字
+x/16s InterpreterRuntime::method(thread)->signature()->base() 显示当前方法的签名
+p InterpreterRuntime::method(thread)->constMethod() 显示当前方法的信息
+p InterpreterRuntime::method(thread)->constMethod()->constants() 显示当前方法的常量池
+p &((struct_name *)0)->member_name 显示字段的偏移量(在ptype /o 无效时使用)
+
+gdb --args ~/linux-x86_64-normal-server-slowdebug/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:+PrintInterpreter -XX:-ProfileInterpreter -Djava.library.path=/java/classes/native jvm.FrameTest
+
+p/x (Method*)($rbp-0x18)
+x/16s $8->name()->base()
+
+LinkResolver::resolve_invoke
+
+
+0x00007fffe103ddd1 jmpq   *0x58(%rbx)
+
+0x00007fffe1028084
+mov -0x18(%rbp),%rbx
+mov 0x10(%rbx),%r11
+movzwl 0x2a(%r11),%r11d
+shl $0x3,%r11d
+sub %r11,%rsp
+
+and $0xfffffffffffffff0,%rsp
