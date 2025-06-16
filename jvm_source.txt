@@ -2306,17 +2306,226 @@ TemplateTable::_goto()
 0x00007fffe101e063: jmpq *0x88(%r13)
 
 第56篇-ProfileData与DataLayout
+todo
 
 第57篇-profile实例
+todo
 
 第58篇-触发编译
-当计数值超过阈值时会调用InterpreterRuntime::frequency_counter_overflow()函数对方法或块进行编译：
-InterpreterRuntime::frequency_counter_overflow(){
+当计数值超过阈值时会调用InterpreterRuntime::frequency_counter_overflow()函数对方法或块进行编译，当为非OSR编译时，函数永远返回null，即不会立即执行编译，而是提交任务给后台编译线程编译；当为OSR编译时，传递的branch_bcp参数不为null，在调用的frequency_counter_overflow_inner()函数中通常会等待编译完成后才会返回
+InterpreterRuntime::frequency_counter_overflow_inner(){
+    ...
+    // branch_bcp非空时获取其相对于方法字节码起始地址code_base的偏移，否则等于InvocationEntryBci，
+    // InvocationEntryBci表明这是非栈上替换的方法编译
+    constint branch_bci = branch_bcp != NULL? method->bci_from(branch_bcp) : InvocationEntryBci;
+    constint bci = branch_bcp != NULL? method->bci_from(fr.interpreter_frame_bcp()) : InvocationEntryBci;
 
+    // 获取编译策略
+    CompilationPolicy* cp = CompilationPolicy::policy();
+    // 如果要求栈上替换，返回该方法对应的nmethod；否则异步提交一个方法编译的任务给后台编译线程，然后返回NULL
+    nmethod* osr_nm = cp->event(method, method, branch_bci, bci, CompLevel_none, NULL, thread);
+    ...
+}
+nmethod* SimpleThresholdPolicy::event(){
+  if (bci == InvocationEntryBci) {
+    // 编译整个方法
+    method_invocation_event(method, inlinee, comp_level, nm, thread);
+  } else {
+    // 编译热点代码
+    method_back_branch_event(method, inlinee, bci, comp_level, nm, thread);
+    nmethod* osr_nm = inlinee->lookup_osr_nmethod_for(bci, comp_level, false);
+    if (osr_nm != NULL && osr_nm->comp_level() > comp_level) {
+      return osr_nm;
+    }
+  }
+  return NULL;
+}
+AdvancedThresholdPolicy::method_invocation_event(){
+  if (should_create_mdo(mh(), level)) {
+    // 创建MethodData实例并赋值给Method::_method_data属性
+    create_mdo(mh, thread);
+  }
+  // 当前环境支持编译任务并且编译任务不再当前的编译队列中时，可能会编译
+  if (is_compilation_enabled() && !CompileBroker::compilation_is_in_queue(mh, InvocationEntryBci)) {
+    // 判断是否需要对方法进行编译
+    CompLevel next_level = call_event(mh(), level);
+    if (next_level != level) {
+      compile(mh, InvocationEntryBci, next_level, thread);
+    }
+  }
+}
+bool AdvancedThresholdPolicy::should_create_mdo(){
+  if (
+      // 当前的方法在解释执行
+      cur_level == CompLevel_none &&
+      // 当编译队列中的CompLevel_full_optimization层
+      // 级的任务小于（5*C2编译器线程数）时，表示编译器的负载小
+      CompileBroker::queue_size(CompLevel_full_optimization) <= Tier3DelayOn * compiler_count(CompLevel_full_optimization)
+  ) {
+    int i = method->invocation_count();
+    int b = method->backedge_count();
+    double k = Tier0ProfilingStartPercentage / 100.0;
+    // 方法调用次数 或 回边次数 是否超过阈值
+    return call_predicate_helper<CompLevel_none>(i, b, k) || loop_predicate_helper<CompLevel_none>(i, b, k);
+  }
+}
+SimpleThresholdPolicy::compile() {
+  // 如果方法不能被C1编译器编译，则继续在解释执行情况下进行运行时信息的收集，然后用C2编译器编译
+  if (!can_be_compiled(mh, level)) {<br> // 当要求C2编译器编译，并且
+    if (level == CompLevel_full_optimization && can_be_compiled(mh, CompLevel_simple)) {
+        compile(mh, bci, CompLevel_simple, thread); // 递归调用当前函数
+    }
+    return;
+  }
+  ...
+  if (!CompileBroker::compilation_is_in_queue(mh, bci)) {
+    submit_compile(mh, bci, level, thread);
+  }
+}
+AdvancedThresholdPolicy::method_back_branch_event(){
+  //跟method_invocation_event相似，略
 }
 
-53~60
-todo
+第59篇-编译策略
+在执行OSR或方法编译时，调用AdvancedThresholdPolicy::common()函数决定编译策略:
+enum CompLevel {
+  CompLevel_any = -1,
+  CompLevel_all = -1,
+ 
+  // level 0：解释执行
+  CompLevel_none = 0, 
+  // level 1：执行不带profiling的C1代码
+  CompLevel_simple = 1, 
+  // level 2：执行仅带方法调用次数以及循环回边执行次数profiling的C1代码
+  CompLevel_limited_profile = 2, 
+  // level 3：执行带所有profiling的C1代码
+  CompLevel_full_profile = 3, 
+  // level 4：执行C2代码 
+  CompLevel_full_optimization = 4, 
+ 
+  // 在分层编译的情况下仅使用C2进行编译，值为4,也就是level 4
+  CompLevel_highest_tier = CompLevel_full_optimization, 
+  CompLevel_initial_compile = CompLevel_full_profile
+}
+编译层级从一个层级转换到另外一个层级参考的主要指标有：方法统计的运行时信息和编译器线程的负载情况
+编译策略路径参考图：
+其中0、2、3这三个层级下都会周期性的通知AdvancedThresholdPolicy某个函数的方法调用计数（invocation counters）和循环调用计数（backedge counters），不同级别下通知的频率不同。这些通知用来决定如何调整编译层级，所以最终会形成不同的编译路径
+在 5 个层次的执行状态中，CompLevel_simple和CompLevel_full_optimization为终止状态。当一个方法被终止状态编译后，如果编译后的代码没有失效，那么Java虚拟机是不会再次发出对该方法的编译请求的。
+
+1、在CompLevel_none下不执行任何编译，仍然是解释执行当某个方法刚开始执行时，通常会解释执行。当C1和C2的编译任务队列的长度足够短，也可在CompLevel_none下开启profile信息收集。编译队列通过优先级队列实现，每个添加到编译任务队列的方法都会周期的计算其在单位时间内增加的调用次数，每次从编译队列中获取任务时，都选择单位时间内调用次数最大的一个。基于此，我们也可以将那些编译完成后不再使用，调用次数不再增加的方法从编译任务队列中移除。如果当前的编译层级为CompLevel_none，可能会变为CompLevel_limited_profile、CompLevel_full_profile、CompLevel_full_optimization编译层级。
+2、CompLevel_none调整为CompLevel_limited_profile或CompLevel_full_profileAdvancedThresholdPolicy会综合如下两个因素和调用计数将编译级别调整为CompLevel_limited_profile或CompLevel_full_profile：
+    C2编译任务队列的长度决定了下一个编译级别。据观察，CompLevel_limited_profile级别下的编译比CompLevel_full_profile级别下的编译快30%，因此我们应该在只有已经收集了充分的profile信息后才采用CompLevel_full_profile编译，从而尽可能缩短CompLevel_full_profile级别下编译的耗时。当C2的编译任务队列太长的时候，如果选择CompLevel_full_profile则编译会被卡住直到C2将之前的编译任务处理完成，这时如果选择CompLevel_limited_profile编译则很快完成编译。当C2的编译压力逐步减小，就可以重新在CompLevel_full_profile下编译并且开始收集profile信息；
+    根据C1编译任务队列的长度动态的调整阈值，在编译器过载时，将打算编译但是不再被调用的方法从编译队列中移除。
+3、CompLevel_full_profile调整为CompLevel_none、CompLevel_simple、CompLevel_full_optimization当CompLevel_full_profile下profile信息收集完成后就会转换成CompLevel_full_optimization了，可以根据C2编译任务队列的长度来动态调整转换的阈值。当经过C1编译完成后，基于方法的代码块的数量，循环的数量等信息可以判断一个方法是否是琐碎（trivial）的，这类方法在C2编译下会产生和C1编译一样的代码，因此这时会用CompLevel_simple的编译代替CompLevel_full_optimization的编译。
+4、CompLevel_full_profile调整为CompLevel_full_optimization注意CompLevel_full_profile并不是终态，一般到了这个层次的编译任务最终都需要C2编译器承担CompLevel_full_optimization层级的编译任务，所以我们才会看到，当编译层级由其它的调整为CompLevel_full_profile时，通常会判断C2的负载能力。
+
+编译层级从一个层级转换到另外一个层级参考的主要指标还需要参考运行时收集的信息，OSR编译主要是调用AdvancedThresholdPolicy::loop_predicate()函数
+bool AdvancedThresholdPolicy::loop_predicate(int i, int b, CompLevel cur_level) {
+  switch(cur_level) {
+  case CompLevel_none:
+  case CompLevel_limited_profile: {
+    // Tier3LoadFeedback的值默认为5
+    double k = threshold_scale(CompLevel_full_profile, Tier3LoadFeedback);
+    // scale越小时，满足函数的判断条件需要的回边计数值就越小，更大机率被编译
+    return loop_predicate_helper<CompLevel_none>(i, b, k);
+  }
+  case CompLevel_full_profile: {
+    // Tier4LoadFeedback的值默认为3
+    double k = threshold_scale(CompLevel_full_optimization, Tier4LoadFeedback);
+    return loop_predicate_helper<CompLevel_full_profile>(i, b, k);
+  }
+  default:
+    return true;
+  }
+}
+double AdvancedThresholdPolicy::threshold_scale(CompLevel level, int feedback_k) {
+  double queue_size = CompileBroker::queue_size(level); // 编译队列中编译任务的数量
+  int comp_count = compiler_count(level); // 编译器线程数量
+  // 当队列的任务越多时，scale的值越大；当编译的线程数量越多时，scale的值越小
+  double k = queue_size / (feedback_k * comp_count) + 1;
+ 
+  // 获取CodeCache的剩余可用空间，如果不足，则增加C1编译的阈值，从而为C2编译保留足够的空间
+  if ((TieredStopAtLevel == CompLevel_full_optimization) && (level != CompLevel_full_optimization)) {
+    double current_reverse_free_ratio = CodeCache::reverse_free_ratio();
+    if (current_reverse_free_ratio > _increase_threshold_at_ratio) {
+      k *= exp(current_reverse_free_ratio - _increase_threshold_at_ratio);
+    }
+  }
+  return k;
+}
+第60篇-获取编译任务
+在SimpleThresholdPolicy::compile()函数中会调用SimpleThresholdPolicy::submit_compile()函数提交编译任务：
+nmethod* CompileBroker::compile_method(){
+  ...
+  // 如果是本地方法，且不是intrinsic相关方法，则调用NativeLookup加载对应的本地代码
+  if (method->is_native() && !method->is_method_handle_intrinsic()) {
+    bool in_base_library;
+    address adr = NativeLookup::lookup(method, in_base_library, THREAD);
+  }
+    if (method->is_native()) {
+       // PreferInterpreterNativeStubs表示是否总是使用解释器的stub调用本地方法，默认值为false
+      if (!PreferInterpreterNativeStubs || method->is_method_handle_intrinsic()) {
+        int compile_id;
+        {
+          MutexLocker locker(MethodCompileQueue_lock, THREAD);
+          compile_id = assign_compile_id(method, standard_entry_bci);
+        }
+        // 注意这里调用的create_native_wrapper()函数为本地方法生成编译执行的入口，这在之前详细介绍过
+        // 最终调用generate_native_wrapper()
+        (void) AdapterHandlerLibrary::create_native_wrapper(method, compile_id);
+      } else {
+        return NULL;
+      }
+    } else {
+      // 如果因为存储代码的CodeCache已经满了，则直接返回NULL，这样就不会阻塞方法的继续执行
+      if (!should_compile_new_jobs()) {
+         CompilationPolicy::policy()->delay_compilation(method());
+         return NULL;
+      }
+      compile_method_base(method, osr_bci, comp_level, hot_method, hot_count, comment, THREAD);
+    }
+}
+void CompileBroker::compile_method_base(){
+    // 判断线程是否需要等编译任务完成后才继续执行，会判断BackgroundCompilation选项的值，默认为true，
+    // 所以通常是后台编译，不需要等待
+    // 当该方法有断点的时候并不进行编译，当参数-XX:-BackgroundCompilation设置成不是后台编译的时候，
+    // 并不代表是在用户线程编译，而是提交任务CompileTask到CompileQueue，唯一的区别是堵塞当前线程等待
+    // CompileThread直到Task编译成功
+    blocking = is_compile_blocking(method, osr_bci);
+
+    // 创建CompileTask任务，然后添加到C1或C2的任务队列中
+    task = create_compile_task(...)
+
+    // 如果blocking为true，表示需要等待编译任务完成后才能继续执行方法，如OSR编译
+    if (blocking) {
+      wait_for_completion(task);
+    }
+}
+
+在创建虚拟机实例时会调用compilation_init()函数初始化CompileBroker，compilation_init()函数负责初始化编译相关组件，包括编译器实现，编译线程，计数器等。
+其中还会调用CompileBroker::make_compiler_thread()函数，在这个函数中创建出对应的编译线程并启动，启动后的新线程线程会调用compiler_thread_loop()函数从CompileQueue中取任务进行编译。
+启动的新的编译线程的调用栈如下：
+clone() clone.S
+start_thread() pthread_create.c
+java_start() os_linux.cpp
+JavaThread::run()                      thread.cpp
+JavaThread::thread_main_inner()        thread.cpp
+compiler_thread_entry() thread.cpp
+CompileBroker::compiler_thread_loop()  compileBroker.cpp
+{
+    // 只有在没有断点的情况下才会进行编译
+    if (method()->number_of_breakpoints() == 0) {
+      // Compile the method.
+      if ((UseCompiler || AlwaysCompileLoopMethods) &&
+                  CompileBroker::should_compile_new_jobs()) {
+        ...
+        invoke_compiler_on_method(task); // 对编译任务进行编译
+      } else {
+        // 如果编译已经被禁止，则移除队列中的编译任务
+        method->clear_queued_for_compilation();
+      }
+    }
+}
 
 第61篇-安装与卸载编译方法和OSR
 调用compile_java_method()函数编译，这个函数是C1编译器或C2编译器的入口方法，编译完成后调用install_code()函数“安装”代码,

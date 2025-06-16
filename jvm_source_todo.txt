@@ -1,9 +1,6 @@
 更新引用字段时，通过屏障将对应的卡表项标记为脏
-synchronized方法的解析
-invokevirtual统计相关代码部分
 The expression stack grows down incrementally, so the normal guard page mechanism will work for that
 
 exception相关部分，throw指令
-内存分配和回收，new指令
-osr和各种跳转指令
+内存分配和回收，new指令(在基础篇)
 synchronized锁和monitor指令
