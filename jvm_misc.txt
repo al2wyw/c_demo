@@ -1,4 +1,4 @@
-C++ 重载运算符在HotSpot VM中的应用
+C++ 重载运算符在HotSpot VM中的应用:
 内存分配与释放
 在C++中可以通过new运算符和delete运算符进行内存分配与释放，由于C++没有GC托管技术，所以内存申请和释放通常集中到一个地方管理，才会有Metaspace或Arena这些相对复杂一些的内存管理机制。
 在使用new关键字创建Klass或子类的实例时，都会调用Metaspace::allocate()函数从元数据区分配内存；在Klass类中，我们没有看到重载delete运算符，因为删除一个类并没有那么简单，需要借助GC来完成。
@@ -13,7 +13,7 @@ obj2 = h1();
 // 获取_handle值后调用_handle->print()函数
 h1->print();
 
-C++指针和地址偏移在HotSpot VM中的应用
+C++指针和地址偏移在HotSpot VM中的应用:
 operator new分配额外内存:
 我们可以自己写个operator new函数对标准库函数进行重载，通常会根据类信息分配出需要的内存大小，但是我们也可以多分配一些内存，然后在多分配出来的内存上存储一些额外定义的信息(参考例子)
 在HotSpot VM中也有这样的操作，例如Method，根据需要有两个可选择性的字段:
@@ -34,3 +34,49 @@ address* signature_handler_addr() const {
 
 offset_of宏的解析:
 参考例子
+
+C++ RAII在HotSpot VM中的重要应用:
+RAII（Resource Acquisition Is Initialization），也称为“资源获取就是初始化”，是C++语言的一种管理资源、避免泄漏的惯用法。C++标准保证任何情况下，已构造的对象最终会销毁，即它的析构函数最终会被调用。
+1、定义范围锁
+class MutexLocker {
+private:    pthread_mutex_t *_mtx;
+public:
+    MutexLocker(pthread_mutex_t *mtx) {
+        if (mtx) {
+            _mtx = mtx;
+            pthread_mutex_lock(_mtx);
+        }
+    }
+    ~MutexLocker() {
+        if (_mtx)
+            pthread_mutex_unlock(_mtx);
+    }
+};
+我们还可以通过匿名块来进一步细化锁控制的范围。当进入作用域范围时，C++会自动调用MutexLocker的构造函数，当出了作用域范围时，会调用MutexLocker析构函数:
+{
+    // 整个匿名块都会在同步锁的保护下执行
+    MutexLocker locker(&mutex);
+    ...
+}
+2、管理内存资源
+管理内存资源的一些类有HandleMark、ResourceMark等，HandleMark用来管理句柄，ResourceMark用来管理临时使用的内存。
+由于Java类常量池中的字符串、还有一些公共字符串在HotSpot VM中都用Symbol实例来表示，如果想要看某个Klass实例表示的具体的类名称，我有时候会这样做：
+{
+    ResourceMark rm; //ResourceMark rm -> ResourceMark rm(Thread::current()) 记录匿名块开始时线程对应的内存ResourceArea，结束时进行恢复，避免内存泄漏
+    Symbol *sym = _klass->name();
+    const char *klassName = (sym->as_C_string()); //as_C_string会从ResourceArea申请内存
+    ...
+}
+
+3、保存重要信息
+JavaCallWrapper的作用: 1、管理内存资源，在第42篇-JNI引用的管理 2、记录Java调用栈的重要信息，退栈等操作非常依赖这些信息
+{
+    JavaCallWrapper link(...);
+}
+RAII技术被认为是C++中管理资源的最佳方法，进一步引申，使用RAII技术也可以实现安全、简洁的状态管理，编写出优雅的异常安全的代码。
+
+C++的动态分派在HotSpot VM中的重要应用: (浅显)
+void* vtable[1] = {  &Base::base_fun1  }; // 在Base class中，每个类只有一个虚表
+const void**  vfptr = &vtable[0]; // 在Base object中，每个对象实例都只有一个虚表指针 (内存浪费)
+
+jvm中使用KlassVtable来定义虚表

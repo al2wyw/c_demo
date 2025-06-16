@@ -1506,9 +1506,11 @@ struct JavaVM_ {
 跳过，代码分析比较浅显
 第41篇-JNIEnv与JavaVM的初始化
 
-暂时跳过，后续返回阅读
 第42篇-JNI引用的管理（1）
+todo
+
 第43篇-JNI引用的管理（2）
+todo
 
 第44篇-为native方法生成解释执行入口
 在HotSpot VM中，Java方法调用native方法会有2个入口例程，一个为解释执行的入口例程，一个为“编译”执行的入口例程。
