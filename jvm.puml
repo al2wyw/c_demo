@@ -29,6 +29,17 @@ JavaThread --|> Thread
 NamedThread --|> Thread
 WatcherThread --|> Thread
 
+VMThread --|> NamedThread
+ConcurrentGCThread --|> NamedThread
+WorkerThread --|> NamedThread
+
+GCTaskThread --|> WorkerThread
+note top of GCTaskThread
+GCTaskThread is for ParallelGC
+end note
+
+CompilerThread --|> JavaThread
+
 JavaThread ...> OSThread
 
 
