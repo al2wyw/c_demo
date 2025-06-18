@@ -44,9 +44,12 @@ JavaThread ...> OSThread
 
 ResourceObj --|> AllocatedObj
 StackObj --|> AllocatedObj
+CHeapObj --|> AllocatedObj
+CompilationResourceObj --|> AllocatedObj
 note left of AllocatedObj
 StackObj is allocated on stack, no new operator;
 ResourceObj is allocated on heap;
+CHeapObj is allocated by new;
 end note
 
 Parker ..|> PlatformParker

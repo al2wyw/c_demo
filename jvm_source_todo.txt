@@ -2,5 +2,9 @@
 The expression stack grows down incrementally, so the normal guard page mechanism will work for that
 
 exception相关部分，throw指令
-内存分配和回收，new指令(在基础篇)
+内存分配和回收，安全点，new指令(在基础篇)
 synchronized锁和monitor指令
+
+OopMark  偏向(UseBiasedLocking太复杂)
+BasicObjectLock 轻量级
+ObjectMonitor  重量级
