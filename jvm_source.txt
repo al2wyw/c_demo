@@ -310,7 +310,7 @@ movzbl 0x0(%r13),%ebx
 		
 // $0x7ffff73ba4a0这个地址指向的
 // 是对应state状态(out tos)下的一维数组，长度为256
-movabs $0x7ffff73ba4a0,%r10	
+movabs $0x7ffff73ba4a0,%r10
 
 // 注意%r10中存储的是常量，根据计算公式
 // %r10+%rbx*8来获取指向存储入口地址的地址，
@@ -1646,7 +1646,7 @@ InterpreterGenerator::generate_native_entry()函数生成解释执行的入口�
 0x00007fffe1014f85: mov %r11d,(%r10,%r11,1)
 0x00007fffe1014f89: cmpl $0x0,0x1639454d(%rip) # 0x00007ffff73a94e0
 // 如果不相等，则处于安全点，跳转到---- L ----
-0x00007fffe1014f93: jne 0x00007fffe1014fa7 
+0x00007fffe1014f93: jne 0x00007fffe1014fa7
 
 // 判断当前线程的suspend_flags是否为0，如果
 // 是0则跳转到---- Continue ----，表示没有未处理的异常
@@ -2675,3 +2675,43 @@ entry = SharedRuntime::generate_i2c2i_adapters(&_masm,
 // 跳转到Method::_from_compiled_entry开始执行
 0x00007fffe110a284: jmpq *%r11
 
+
+第64篇-C1编译器概述
+C1编译器的大概编译流程: 字节码 -> HIR -> LIR -> 机器码
+typedef enum {
+ _t_compile, // C1编译
+    _t_setup, // 1)设置C1编译环境
+    _t_buildIR, // 2)构造HIR
+        _t_hir_parse, // 从字节码生成HIR
+        _t_gvn, // GVN优化
+        _t_optimize_blocks, // 基本块优化
+        _t_optimize_null_checks, // null检查优化消除
+        _t_rangeCheckElimination, // 数组范围检查消除
+    _t_emit_lir, // 3)构造LIR
+        _t_linearScan, // 线性扫描寄存器分配
+        _t_lirGeneration, // 生成LIR
+    _t_codeemit, // 4)机器代码生成
+    _t_codeinstall, // 5)替换解释执行的代码为机器代码(nmethod)
+  max_phase_timers
+} TimerName;
+int Compilation::compile_java_method() {
+  // ...
+  // 1、构造HIR
+  {
+    build_hir();
+  }
+  // 2、构造LIR
+  {
+    _frame_map = new FrameMap(
+        method(),
+        hir()->number_of_locks(), 
+        MAX2(4, hir()->max_stack()));
+    emit_lir();
+  }
+  // 3、生成机器代码
+  {
+    return emit_code_body();
+  }
+}
+
+第65篇-创建HIR
