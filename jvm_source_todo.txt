@@ -3,7 +3,6 @@ The expression stack grows down incrementally, so the normal guard page mechanis
 
 内存分配和回收，new指令(在基础篇)
 synchronized锁和monitor指令
-memory order, memory fence
 
 自研备注:
 锁机制
@@ -32,7 +31,7 @@ InterpreterRuntime::throw_pending_exception do nothing
 编译执行进入安全点: JVM_handle_linux_signal => SharedRuntime::get_poll_stub => SharedRuntime::polling_page_return_handler_blob()->entry_point()
 native执行进入安全点: native方法执行完毕后检查是否要进入安全点 => transition_from_native => JavaThread::check_safepoint_and_suspend_for_native_trans()
 
-memory order
+memory order机制
 four primitive memory barrier operations:
 Load1(s); LoadLoad; Load2: Loads before Load1 may *not* float below Load2
 Store1(s); StoreStore; Store2: Stores before Store1 may *not* float below Store2
