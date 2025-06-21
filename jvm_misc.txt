@@ -80,3 +80,24 @@ void* vtable[1] = {  &Base::base_fun1  }; // 在Base class中，每个类只有�
 const void**  vfptr = &vtable[0]; // 在Base object中，每个对象实例都只有一个虚表指针 (内存浪费)
 
 jvm中使用KlassVtable来定义虚表
+
+C++一种巧妙的内存管理方式:
+class RelocationHolder {
+private :
+    enum {   _relocbuf_size = 5 };
+    // 总共分配了5 * 8 = 40 字节大小的内存用来存储Relocation
+    void* _relocbuf[ _relocbuf_size ];
+public :
+    Relocation* reloc() const {   return (Relocation*) &_relocbuf[0]; }
+};
+
+class Relocation {
+public:
+    // 通过new可以重复使用RelocationHolder的内存(如果RelocationHolder分配在栈上则会自动回收)
+    void *operator new( size_t size,  const RelocationHolder &holder) {   return holder.reloc();  }
+    // 子类按一定的规则将相应的数据写入CodeCache中
+    virtual void pack_data_to() {}
+};
+
+DataRelocation : Relocation
+CallRelocation : Relocation

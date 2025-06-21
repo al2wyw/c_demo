@@ -100,11 +100,18 @@ Method ...> ConstMethod
 ConstMethod ...> ConstantPool
 ConstantPool ...> ConstantPoolCache
 
+CodeBlob ..|> _ValueObj
+nmethod ..|> CodeBlob
+RuntimeStub ..|> CodeBlob
+SingletonBlob ..|> CodeBlob
+SafepointBlob ..|> SingletonBlob
+
 note as common_note
   将src.zip解压后将相应java源代码路径配置到jdk的source path中即可在idea中查看源码
   -XX:-UseStackBanging和-XX:-ProfileInterpreter，不生成栈检查和统计相关的汇编代码
   <b>global.h</b>: jvm flag 参数
   <b>javaCalls.cpp</b>: JavaCalls::call native方法中调用java方法
+  <b>interpreterRuntime(解释执行的方法)、stubRoutines(编译执行的方法)、SharedRuntime(解释/编译执行的方法)
   <b>macroAssembler_x86.cpp</b>: MacroAssembler::call_VM 生成 模板解释器执行指令时(即java方法)调用native方法(interpreterRuntime的方法) 的例程的汇编代码
   <b>templateInterpreter_x86_64.cpp</b>: AbstractInterpreterGenerator::generate_method_entry generate_normal_entry generate_native_entry 生成java/native解释执行的入口
   <b>sharedRuntime_x86_64.cpp</b>: SharedRuntime::generate_native_wrapper 生成native编译执行的入口:
