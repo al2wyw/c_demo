@@ -48,8 +48,8 @@ CHeapObj --|> AllocatedObj
 CompilationResourceObj --|> AllocatedObj
 note left of AllocatedObj
 StackObj is allocated on stack, no new operator;
-ResourceObj is allocated on heap;
-CHeapObj is allocated by new;
+ResourceObj is allocated on arena/resource area/c heap ???;
+CHeapObj is allocated by c heap (malloc and free);
 end note
 
 Parker ..|> PlatformParker
