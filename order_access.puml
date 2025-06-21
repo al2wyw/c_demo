@@ -7,7 +7,9 @@ participant "objectMonitor.cpp" as objectM
 participant "unsafe.cpp" as unsafe
 participant "bytecodeInterpreter.cpp" as interpret
 participant "orderAccess_linux_x86.inline.hpp" as OrderAccess
-
+note left of interpret
+TemplateTable的实现不是这样的
+end note
 User -> interpret: putField
 activate interpret
 

@@ -31,3 +31,21 @@ InterpreterRuntime::throw_pending_exception do nothing
 解析执行进入安全点: InterpreterRuntime::at_safepoint 后续是jvmti的逻辑(JvmtiExport::post_single_step把线程加入到待暂停的列表中，最终会调用JvmtiEnv::SuspendThread函数)
 编译执行进入安全点: JVM_handle_linux_signal => SharedRuntime::get_poll_stub => SharedRuntime::polling_page_return_handler_blob()->entry_point()
 native执行进入安全点: native方法执行完毕后检查是否要进入安全点 => transition_from_native => JavaThread::check_safepoint_and_suspend_for_native_trans()
+
+memory order
+four primitive memory barrier operations:
+Load1(s); LoadLoad; Load2: Loads before Load1 may *not* float below Load2
+Store1(s); StoreStore; Store2: Stores before Store1 may *not* float below Store2
+Load1(s); LoadStore; Store2: Loads before Load1 may *not* float below Store2
+Store1(s); StoreLoad; Load2: Stores before Store1 may *not* float below Load2
+
+|     memory accesses      | ^
+|------- release  ---------| |  StoreStore
+      memory accesses -------|
+|------- acquire  ---------| |  LoadLoad/LoadStore
+|     memory accesses      | V
+fence = release + acquire       StoreLoad
+load_acquire = acquire + read variable; release_store = release + write variable; store_fence = fence + write variable
+why StoreStore is release and LoadLoad/LoadStore is acquire:
+normal r/w StoreStore volatile w StoreLoad
+volatile r LoadLoad LoadStore normal r/w
