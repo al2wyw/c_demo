@@ -44,7 +44,7 @@
  * ZF零标识: 算术或位逻辑运算结果为0,则ZF值为1,否则为0(test和comp只影响标志位)
  * SF符号标识: 运算结果有符号整数的符号位,0表示正数,1表示负数
  * 前6个参数 rdi、rsi、rdx、rcx、r8、r9
- * 函数返回 rax
+ * 函数返回 rax (struct 小于16字节通过rax和rdx传递，超过16字节通过隐藏指针传递 System V ABI)
  * callee保存寄存器，callee要保证这些寄存器的值在调用前后保持不变 rbx、rbp、r12 ~ r15
  *   stack base
  * |----------------|
