@@ -101,3 +101,56 @@ public:
 
 DataRelocation : Relocation
 CallRelocation : Relocation
+
+关于x86的内存屏障:
+内存屏障分为两层：编译器屏障和CPU屏障，前者只在编译期生效，目的是防止编译器生成乱序的内存访问指令；后者通过插入或修改特定的CPU指令，在运行时防止内存访问指令乱序执行。
+
+编译器屏障:
+asm volatile("": : :"memory")
+它告诉编译器：这条指令（其实是空的）可能会读取/修改任何内存地址，那么编译器会变得保守起来，它会防止内存访问操作的乱序优化
+
+x86 CPU屏障:
+内存屏障可以分为两类：
+本身是内存屏障，比如“lfence”，“sfence”和“mfence”汇编指令；
+本身不是内存屏障，但是被lock指令前缀修饰，其组合成为一个内存屏障；(开销更小)
+
+HotSpot VM中使用内存屏障：(x86和ia32架构)
+x86和ia32架构只支持StoreLoad重排序(比较严格)，这个问题用lock前缀或mfence解决，不能靠组合sfence和lfence解决。
+acquire语义防止它后面的读写操作重排序到acquire前面，所以LoadLoad和LoadStore组合后可满足要求；
+release防止它前面的读写操作重排序到release后面，所以可由StoreStore和LoadStore组合后满足要求；
+这样acquire(在上)和release(在下)就可以组合实现一个"栅栏"，禁止内部读写操作跑到外边，但是外边的读写操作仍然可以跑到“栅栏”内。
+
+具体在实现时，acquire()函数读取了一个C++的volatile变量，而release()函数写入了一个C++的volatile变量。
+这可能是微软从Visual Studio 2005开始就对C++ volatile关键字添加了同步语义，也就是对volatile变量的读操作具有acquire语义，对volatile变量的写操作具有release语义。
+
+同时借助acquire与release语义可以实现互斥锁(mutex)，实际上，acquire的本意是acquire a lock，release的本意是release a lock，
+因此，互斥锁能保证被锁住的区域内得到的数据不会是过期的数据，而且所有写入操作在release之前一定会写入内存。
+
+关于CAS原子操作，说点别人没说的:
+Atomic::cmpxchg{
+    int mp = os::is_MP();
+    __asm__ volatile (LOCK_IF_MP(%4) "cmpxchgl %1,(%3)"
+    : "=a" (exchange_value)
+    : "r" (exchange_value), "a" (compare_value), "r" (dest), "r" (mp)
+    : "cc", "memory");
+}
+当操作系统为多核时，mp为true，此时会在cmpxhg指令之前加一个lock前缀。因为cmpxhg指令本身并不是原子的，但是加lock前缀后就会变为原子的。
+cmpxhg的操作数可以是reg 和 reg，也可以是mem 和 reg，前者不需要lock，因为在同一个核上，寄存器只会有一套。只有mem 和 reg时才可能会需要lock，这个lock是对多核有效的。
+r表示将变量放入通用寄存器，而a表示rax寄存器(cmpxhg会比较rax和目标数，然后把源数写到目标数)
+cc表示编译器汇编代码会导致CPU状态位的改变，也就是eflags
+(__asm__相关内容参考gcc内嵌汇编)
+
+历数Java虚拟机GC的种种缺点：
+1、停顿：在垃圾收集时，垃圾收集周期要求所有的应用程序线程停顿，这样是为了避免在垃圾收集时，应用程序代码破坏垃圾收集线程所掌握的堆状态信息
+2、占用更多的内存/内存利用率低：采用分代垃圾收集的GC不允许使用To Survivor区(占年轻代的1/10被浪费)；
+老年代的空间利用率不是太高，总要有一部分担保空间来保证年轻代GC的顺利执行；
+为了加快老年代的扫描速度，需要卡表和偏移表等数据结构进行辅助，这些都需要空间；
+3、GC发生时间未知：
+垃圾收集发生的时机没有确定性，也不是以固定的频率发生，这也会造成一些浮动垃圾，影响到空间利用率；
+无法预知GC什么时候发生也会导致其它非预期的行为出现，如CMS触发FullGC时STW时间长，此时出现大量的Http请求则会导致大量超时
+4、GC移动对象：
+Java对象在GC后会被移动到其它地方，所以在GC期间不允许操作Java对象，引用这个Java对象的地址在GC后也需要更新
+4.1、临界区
+CriticalNative是一种特殊的JNI函数，整个函数都是一个阻止GC的临界区(禁止JVM进行垃圾回收的临界区)
+4.2、堆外内存
+许多的通信框架都会开辟一块堆外内存来提高效率(重复使用避免频繁申请内存)，因为操作系统把内存中的数据写入磁盘或网络时，要求数据所在的内存区域不能变动，但是GC会对内存进行整理，导致数据内存地址发生变化，所以只能先拷贝到堆外内存（不受GC影响），然后把这个地址发给操作系统

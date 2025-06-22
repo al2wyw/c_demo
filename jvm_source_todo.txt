@@ -49,7 +49,7 @@ why StoreStore is release and LoadLoad/LoadStore is acquire:(from java并发编�
 normal r/w StoreStore volatile w StoreLoad
 volatile r LoadLoad LoadStore normal r/w
 
-模版解释执行 volatile for x86:
+模版解释执行 volatile for x86:(参考cpu架构允许的重排序)
 putField:
 // volatile_barrier(LoadStore|StoreStore) no need for x86
 put value to field
@@ -57,4 +57,6 @@ volatile_barrier(StoreLoad|StoreStore)
 getField:
 get value from field
 // volatile_barrier((LoadLoad |LoadStore) no need for x86
-volatile_barrier: if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}}
+
+volatile_barrier:
+if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额外操作
