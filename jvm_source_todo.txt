@@ -48,6 +48,7 @@ load_acquire = acquire + read variable; release_store = release + write variable
 why StoreStore is release and LoadLoad/LoadStore is acquire:(from java并发编程的艺术)
 normal r/w StoreStore volatile w StoreLoad
 volatile r LoadLoad LoadStore normal r/w
+jdk15的StoreStore、LoadLoad、LoadStore、release、acquire全部变成 __asm__ volatile ("" : : : "memory"); (编译器屏障)
 
 模版解释执行 volatile for x86:(参考cpu架构允许的重排序)
 putField:
