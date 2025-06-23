@@ -134,8 +134,9 @@ Atomic::cmpxchg{
     : "r" (exchange_value), "a" (compare_value), "r" (dest), "r" (mp)
     : "cc", "memory");
 }
-当操作系统为多核时，mp为true，此时会在cmpxhg指令之前加一个lock前缀。因为cmpxhg指令本身并不是原子的，但是加lock前缀后就会变为原子的。
+当操作系统为多核时，mp为true，此时会在cmpxchg指令之前加一个lock前缀。因为cmpxchg指令本身并不是原子的，但是加lock前缀后就会变为原子的。
 cmpxhg的操作数可以是reg 和 reg，也可以是mem 和 reg，前者不需要lock，因为在同一个核上，寄存器只会有一套。只有mem 和 reg时才可能会需要lock，这个lock是对多核有效的。
+xchg具有隐含的 LOCK语义，无需额外增加lock前缀
 r表示将变量放入通用寄存器，而a表示rax寄存器(cmpxhg会比较rax和目标数，然后把源数写到目标数)
 cc表示编译器汇编代码会导致CPU状态位的改变，也就是eflags
 (__asm__相关内容参考gcc内嵌汇编)
