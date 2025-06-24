@@ -1506,11 +1506,10 @@ struct JavaVM_ {
 跳过，代码分析比较浅显
 第41篇-JNIEnv与JavaVM的初始化
 
+未读跳过，暂时涉及不到
 第42篇-JNI引用的管理（1）
-todo
-
 第43篇-JNI引用的管理（2）
-todo
+
 
 第44篇-为native方法生成解释执行入口
 在HotSpot VM中，Java方法调用native方法会有2个入口例程，一个为解释执行的入口例程，一个为“编译”执行的入口例程。
@@ -2013,7 +2012,7 @@ case T_OBJECT : move oop temp from stack to rax
 
 第51篇-SharedRuntime::generate_native_wrapper()生成编译入口
 当统计到一个native方法被调用足够多次之后，HotSpot VM会为它专门生成编译执行的入口例程。这个入口例程的目的与生成解释执行的入口例程一样，都是因为调用约定不同，所以要进行栈帧布局和转换。
-todo
+未读跳过，可以参考解释执行的入口例程
 
 第52篇-即时编译器
 参考pdf
@@ -2308,10 +2307,78 @@ TemplateTable::_goto()
 0x00007fffe101e063: jmpq *0x88(%r13)
 
 第56篇-ProfileData与DataLayout
-todo
+class MethodData : public Metadata {
+
+  // 这个值是为了更快的通过字节码下标索引找到对应data的指针（调用bci_to_dp()函数）
+  // 或通过字节码下标索引找到对应的ProfileData（调用bci_to_data()函数）
+  int     _hint_di;
+
+  // 对回边和方法调用进行计数
+  InvocationCounter _invocation_counter;
+  InvocationCounter _backedge_counter;
+
+  // 开始计数时的初始值
+  int               _invocation_counter_start;
+  int               _backedge_counter_start;
+
+  int       _data_size;
+
+  // 形参的data索引，如果没有，此值为-1
+  int       _parameters_type_data_di;
+
+  // 数据的起始地址
+  intptr_t  _data[1];
+  
+  // ...
+}
+class ProfileData : public ResourceObj {
+  DataLayout* _data;
+  // ...
+}
+除去MethodData本身占用的内存外，还会额外分配不少内存(数组)用来存储统计相关的信息ProfileData，MethodData::_data是这个数组的首地址，而统计信息具有各种子类，每个子类大小不一，其数据的布局由DataLayout决定
+DataLayout：
+tag: 这个属性决定着ProfileData，也就是这一部分数据对应着哪个具体的ProfileData的子类，不同的子类其_cells数组的大小不同
+_bci: 表示字节码索引，当前的_cells中存储的就是关于这个字节码的统计信息
+
+调用MethodData::data_layout_at()获取到DataLayout指针后，可以直接根据布局中的_tag属性转换为ProfileData实例，通过ProfileData实例操作_cells中存储的数据
+在分配MethodData实例时，需要调用如下函数计算分配的内存空间的大小MethodData::compute_allocation_size_in_bytes，除了要开辟自身占用的内存空间外，还要额外开辟另外的4部分空间：
+1、为当前的字节码计算需要的统计信息占用的内存大小，因为只有部分字节码需要统计信息；(对于方法调用来说，有时候还需要统计方法的参数或返回值)
+2、计算用来跟踪陷阱(ProfileTraps)的统计信息占用的内存大小，当激进优化的假设不成立，出现 “罕见陷阱”（Uncommon Trap）时可以通过逆优化退回到解释状态继续执行。
+3、4、方法参数相关的统计
+然后调用MethodData::initialize_data和post_initialize进行ProfileData初始化
+BranchData : JumpData : ProfileData
+taken        taken
+displacement displacement
+not_taken
+BranchData 3个属性: taken命中计数器，not_taken未命中计数器，displacement调整MethodData指针指向(taken时)跳转目标的字节码对应的ProfileData，如果跳转后的字节码没有对应的ProfileData则指向limit_data_position(MethodData::bci_to_dp)
 
 第57篇-profile实例
-todo
+goto字节码指令调用的TemplateTable::branch()函数中会调用InterpreterMacroAssembler::profile_taken_branch()函数，生成的汇编代码如下：
+// 如果开启了选项ProfileInterpreter，则执行分支跳转相关的性能统计
+
+// %rax中保存着mdp（method data pointer）
+0x00007fffe101dd14: mov -0x20(%rbp),%rax
+// 如果Method::_method_data的值为NULL，则跳转到---- profile_continue ----
+0x00007fffe101dd18: test %rax,%rax
+0x00007fffe101dd1b: je 0x00007fffe101dd39
+
+// 代码执行到这里时，表示Method::_method_data的值不为NULL
+// 根据Method::_method_data获取到JumpData::taken_off_set偏移处属性的值并存储到%rbx中
+0x00007fffe101dd21: mov 0x8(%rax),%rbx
+// 增加DataLayout::counter_increment，值为1
+0x00007fffe101dd25: add $0x1,%rbx
+// sbb是带借位减法指令
+0x00007fffe101dd29: sbb $0x0,%rbx
+// 存储回JumpData::taken_off_set偏移处
+0x00007fffe101dd2d: mov %rbx,0x8(%rax)
+
+// %rax中存储的是method data pointer
+// 根据method data pointer获取JumpData::displacement_off_set偏移处的值
+0x00007fffe101dd31: add 0x10(%rax),%rax
+// 将%rax中存储的值更新到栈中interpreter_frame_mdx_offset偏向处
+0x00007fffe101dd35: mov %rax,-0x20(%rbp)
+// ***** profile_continue *****
+当Method::_method_data不为NULL时，会向MethodData::_data中记录控制转移的次数(注意这里是控制转移的次数，并不是回边的次数)
 
 第58篇-触发编译
 当计数值超过阈值时会调用InterpreterRuntime::frequency_counter_overflow()函数对方法或块进行编译，当为非OSR编译时，函数永远返回null，即不会立即执行编译，而是提交任务给后台编译线程编译；当为OSR编译时，传递的branch_bcp参数不为null，在调用的frequency_counter_overflow_inner()函数中通常会等待编译完成后才会返回
