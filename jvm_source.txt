@@ -2782,3 +2782,261 @@ int Compilation::compile_java_method() {
 }
 
 第65篇-创建HIR
+void Compilation::build_hir() {
+  // 1、创建HIR
+  _hir = new IR(this, method(), osr_bci());
+ 
+  // 1.2、优化：条件表达式消除，基本块消除
+  // UseC1Optimizations选项默认的值为true
+  if (UseC1Optimizations) { 
+    _hir->optimize_blocks();
+  }
+ 
+  _hir->split_critical_edges();
+ 
+  // 为了更好的进行后续代码的生成，需要对基本块进行一个排序
+  _hir->compute_code();
+ 
+  // 1.3、优化：全局值编号优化
+  if (UseGlobalValueNumbering) { 
+    int instructions = Instruction::number_of_instructions();
+    GlobalValueNumbering gvn(_hir);
+  }
+ 
+  // 1.4、优化：范围检查消除
+  if (RangeCheckElimination) { 
+    if (_hir->osr_entry() == NULL) {
+      RangeCheckElimination::eliminate(_hir);
+    }
+  }
+ 
+   // 1.5、优化：null检查消除
+  if (UseC1Optimizations) { 
+    _hir->eliminate_null_checks();
+  }
+ 
+  // 在全局值编号(GVN，Global Value Numbering)后计算使用次数
+  _hir->compute_use_counts(); 
+}
+HIR的创建过程主要是创建控制流图和基本块:
+在BlockListBuilder类的构造函数中调用了3个函数，分别是创建控制流图的首个基本块，创建所有基本块以及标出循环相关信息。
+在MethodLiveness类的构造函数中也会调用3个函数，分别是初始化基本块，计算块中的活跃集以及传播活跃集。
+
+创建控制流图的首个基本块:
+void BlockListBuilder::set_entries(int osr_bci) {
+  BlockBegin* std_entry = make_block_at(0, NULL); 
+  // 获取IRScope中的_caller属性的值，这里暂时不考虑函数内联的情况
+  // 所以_caller属性的值一般为NULL
+  if (scope()->caller() == NULL) { 
+    std_entry->set(BlockBegin::std_entry_flag);
+  }
+  // ...
+}
+BlockBegin* BlockListBuilder::make_block_at(int cur_bci, BlockBegin* predecessor) {
+   BlockBegin* block = _bci2block->at(cur_bci);
+   if (block == NULL) {
+     block = new BlockBegin(cur_bci);
+     // 初始化的_stores_to_locals属性是BitMap类型的实例
+     block->init_stores_to_locals(method()->max_locals()); 
+     // 有对_bic2block属性的操作
+     _bci2block->at_put(cur_bci, block); 
+     // 有对_blocks属性的操作
+     _blocks.append(block); 
+   }
+   // 更新前驱和后继基本块的相关信息
+   if (predecessor != NULL) {
+     predecessor->add_successor(block);
+     block->increment_total_preds();
+   }
+   return block;
+}
+_bci2block判断是否已经为当前的字节码指令建立了基本块，能避免重复创建基本块，例如在回边的时候，跳转的目标字节码指令可能已经有了对应的基本块
+创建所有基本块:
+void BlockListBuilder::set_leaders() {
+  // 通过ciBytecodeStream迭代被编译方法中的所有字节码指令
+  ciBytecodeStream s(method());
+  while (s.next() != ciBytecodeStream::EOBC()) {
+    int cur_bci = s.cur_bci();
+
+    // 获取当前的字节码指令对应的基本块
+    if (bci_block_start.at(cur_bci)) {
+      current = make_block_at(cur_bci, current);
+    }
+
+    switch (s.cur_bc()) {
+      // 省略其他return和throw
+      case Bytecodes::_return:
+        current = NULL;
+        break;
+      // 省略其他if
+      case Bytecodes::_ifnonnull:
+        make_block_at(s.next_bci(), current);
+        make_block_at(s.get_dest(), current);
+        current = NULL;
+        break;
+      case Bytecodes::_goto:
+        make_block_at(s.get_dest(), current);
+        current = NULL;
+        break;
+      // 省略jsr和jsr_w指令的实现逻辑
+      // 省略_tableswitch 和 _lookupswitch
+
+    }// end switch
+  }
+}
+控制流图的基本块的划分原则是：
+方法的第1个字节码指令(bci_block_start)
+控制转移指令的目标位置
+控制转移指令的下一条字节码指令
+
+初始化基本块:
+MethodLiveness::init_basic_blocks(){
+   int method_len = method()->code_size();
+   // 此函数填充ciMethodBlocks类中的_blocks（类型为ciBlock*）和_bci_to_block
+   ciMethodBlocks *mblocks = method()->get_method_blocks();
+ 
+   // 创建数组保存bci到BasicBlock的映射信息
+   _block_map = new (arena()) GrowableArray<BasicBlock*>(arena(), method_len, method_len, NULL);
+ 
+   _block_count = mblocks->num_blocks();
+   _block_list = (BasicBlock **) arena()->Amalloc(sizeof(BasicBlock *) * _block_count);
+ 
+   // Used for patching up ret control flow.
+   GrowableArray<BasicBlock*>* ret_list = new GrowableArray<BasicBlock*>(5);
+
+   // 根据ciMethodBlocks生成自己的_block_list，之前是ciBlock，现在是BasicBlock
+   for (int blk = 0; blk < _block_count; blk++) {
+      ciBlock *cib = mblocks->block(blk);
+ 
+      int start_bci = cib->start_bci();
+     _block_list[blk] = new (arena()) BasicBlock(this, start_bci, cib->limit_bci());
+     _block_map->at_put(start_bci, _block_list[blk]);
+ 
+     // 通过位来标记出基本块的第一个字节码指令
+     _bci_block_start.set_bit(start_bci); 
+   }
+   // 省略BasicBlock链表的链接逻辑
+}
+ciMethodBlocks::ciMethodBlocks(Arena *arena, ciMethod *meth){
+  int block_estimate = _code_size / 8;
+  // _blocks的类型为GrowableArray<ciBlock *>*
+  _blocks = new(_arena) GrowableArray<ciBlock *>(_arena, block_estimate, 0, NULL);
+
+  int b2bsize = _code_size * sizeof(ciBlock **);
+  // _bci_to_block的类型为ciBlock**
+  _bci_to_block = (ciBlock **) arena->Amalloc(b2bsize);
+  // 以_bci_to_block指向的地址开始进行初始化
+  Copy::zero_to_words((HeapWord*) _bci_to_block, b2bsize / sizeof(HeapWord));
+
+  // 创建ciBlock并追加到_blocks属性中
+  ciBlock *b = new(arena) ciBlock(_method, _num_blocks++, 0);
+  _blocks->append(b);
+  _bci_to_block[0] = b;
+
+  // ...
+  // 遍历字节码指令并划分出基本块 
+  do_analysis(); 
+  // ... 
+}
+void ciMethodBlocks::do_analysis() {
+  ciBytecodeStream s(_method);
+  ciBlock *cur_block = block_containing(0); // 返回_bci_to_block[0]的值
+  int limit_bci = _method->code_size();
+
+  // 对字节码指令进行遍历
+  while (s.next() != ciBytecodeStream::EOBC()) {
+    int bci = s.cur_bci();
+
+    // 查看当前的字节码指令是否还在cur_block块表示的范围内，如果是就返
+    // 回cur_block；如果不是就创建一个新的，然后结束上一次的基本块
+    ciBlock *new_block = block_containing(bci);
+    if (new_block == NULL || new_block == cur_block) {
+      // 当前的字节码指令还在创建出来的cur_block基本块表示的范围之内
+      _bci_to_block[bci] = cur_block;
+    } else {
+      // 当前的字节码指令已经不属于当前的块，结束此块，将创建出的新块赋值给cur_block属性
+      cur_block->set_limit_bci(bci);
+      cur_block = new_block;
+    }
+
+    switch (s.cur_bc()) {
+      // 省略其他if
+      case Bytecodes::_ifnonnull :
+        {
+          cur_block->set_control_bci(bci);
+          ciBlock *fall_through = make_block_at(s.next_bci());
+          int dest_bci = s.get_dest();
+          ciBlock *dest = make_block_at(dest_bci);
+          break;
+        }
+      // 省略其他字节码
+    }
+  }
+}
+ciBlock *ciMethodBlocks::make_block_at(int bci) {
+  ciBlock *cb = block_containing(bci);
+  if (cb == NULL ) {
+     // 当cb为NULL时，表示是第一次访问些字节码指令，需要创建一个全新的
+     // 基本块，并且将bci代表的字节码指令指定为此基本块的第一条字节码指令
+     ciBlock *nb = new(_arena) ciBlock(_method, _num_blocks++, bci);
+     _blocks->append(nb);
+     _bci_to_block[bci] = nb;
+    return nb;
+  } else if (cb->start_bci() == bci) {
+     // 已经创建了字节码指令对应的基本块，直接返回即可
+     return cb;
+  } else {
+     // 已经创建了一个基本块，而bci表示的字节码指令并不是这个基本块的
+     // 第一个字节码指令，所以需要将这个已经创建的基本块分割为2个基本块
+     return split_block_at(bci);
+  }
+}
+ciBlock *ciMethodBlocks::split_block_at(int bci) {
+  // 获取之前创建出来的基本块
+  ciBlock *former_block = block_containing(bci); 
+  ciBlock *new_block = new(_arena) ciBlock(_method, _num_blocks++, former_block->start_bci());
+  _blocks->append(new_block);
+
+  new_block->set_limit_bci(bci);
+  former_block->set_start_bci(bci);
+
+  // 由于之前小于等于bci-1下标索引的字节码指令可能已经映射为指向之前创建出来的基本块了，
+  // 所以需要将这一部分重新映射指向为新创建出来的基本块
+  for (int pos=bci-1; pos >= 0; pos--) {
+    ciBlock *current_block = block_containing(pos);
+    if (current_block == former_block) {
+      // 更新之前的映射信息
+      _bci_to_block[pos] = new_block;
+    } else if (current_block == NULL) {
+      continue;
+    } else {
+      break;
+    }
+  }
+
+  // ...
+  return former_block;
+}
+
+计算块中的活跃集：
+void MethodLiveness::init_gen_kill() {
+  for (int i=_block_count-1; i >= 0; i--) {
+    _block_list[i]->compute_gen_kill(method());
+  }
+}
+load_two()与load_one()操作的是_gen，而store_two()与store_one()操作的是_kill，这2个属性定义在MethodLiveness类中:
+_gen is the set of locals used before they are defined in the range.  _kill is the set of locals defined before they are used.
+这样看来，只有首次出现的、操作局部变量表中同一个索引位置的store或load指令才能被_gen或_kill记录下来。
+
+传播活跃集:
+void MethodLiveness::propagate_liveness() {
+
+}
+将_block_list中存储的基本块逆序存储到_work_list中，然后调用propagate()函数循环进行处理
+
+标出循环相关信息:
+void BlockListBuilder::mark_loops() {
+
+}
+注意对irscope->requires_phi_function()函数的调用，这会改变IRScope中_requires_phi_function属性的值。
+
