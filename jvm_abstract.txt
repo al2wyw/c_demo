@@ -1,4 +1,4 @@
-call_VM routine:
+** call_VM routine:
 
 setup args to rdi rsi etc.
 save bcp to stack
@@ -14,7 +14,7 @@ clear res from thread
 
 move bcp local from stack to reg
 
-invoke_virtual routine:
+** invoke_virtual routine:
 
 setup args to stack by other inst
 
@@ -27,7 +27,7 @@ test receiver
 save rsp to stack
 
 find method target via vtable (optional)
-jmp _from_interpretered_entry address:
+jmp from_interpreted_entry address:
     leaveq by return inst (mov rbp to rsp, pop rbp)
 
 jmp invoke_return_entry address:
@@ -35,7 +35,17 @@ jmp invoke_return_entry address:
     add (args num)*8 to rsp
     jmp next bcp address
 
-invoke_native routine:
+** from_interpreted_entry is i2c adapter:
+move return address(tos) to rax
+stack mem alignment
+push return address from rax
+
+setup args to reg and stack
+save Method* to JavaThread::_callee_target
+move Method* to rax
+jmp from_interpreted_entry address
+
+** invoke_native routine:
 
 setup args to stack by other inst
 
@@ -63,3 +73,7 @@ clear rsp rbp last_pc from thread
 clear JavaThread::active_handles::_top
 
 ...
+
+
+
+from_interpreted_entry 和 from_compiled_entry 都是 jmp 过去的
