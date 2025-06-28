@@ -41,7 +41,7 @@ int template_new() {
     p_fun fun=code;
     return fun();
 }
-
+// c++通过dlsym可以实现热替换，但是需要在代码里面显式调用dlsym
 void main() {
     int obj = new();
     int obj2 = template_new();
