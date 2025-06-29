@@ -43,7 +43,7 @@ push return address from rax
 setup args to reg and stack
 save Method* to JavaThread::_callee_target
 move Method* to rax
-jmp from_interpreted_entry address
+jmp from_compiled_entry address
 
 ** invoke_native routine:
 
