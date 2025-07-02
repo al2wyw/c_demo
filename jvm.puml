@@ -52,6 +52,12 @@ ResourceObj is allocated on arena/resource area/c heap ???;
 CHeapObj is allocated by c heap (malloc and free);
 end note
 
+Arena --|> CHeapObj
+ResourceArea --|> Arena
+Chunk --|> CHeapObj
+Metaspace --|> CHeapObj
+CollectedHeap --|> CHeapObj
+
 Parker ..|> PlatformParker
 ParkEvent ..|> PlatformEvent
 note left of PlatformParker

@@ -3030,15 +3030,244 @@ _gen is the set of locals used before they are defined in the range.  _kill is t
 
 传播活跃集:
 void MethodLiveness::propagate_liveness() {
-
+    //全是贴代码，没有多少解析
 }
 将_block_list中存储的基本块逆序存储到_work_list中，然后调用propagate()函数循环进行处理
 
 标出循环相关信息:
 void BlockListBuilder::mark_loops() {
-
+    //全是贴代码，没有多少解析
 }
 注意对irscope->requires_phi_function()函数的调用，这会改变IRScope中_requires_phi_function属性的值。
 
 第66篇-C1编译器实例-控制流图
 -Xcomp -XX:+TraceLivenessGen -XX:TieredStopAtLevel=1
+public static int fact(int n) {
+    int p = 1;
+    while (n > 0) {
+        p = p * n;
+        n = n - 1;
+    }
+    return p;
+}
+对于基本块的划分有如下几个原则：（1）第一条指令开始（2）分支指令的下一条指令开始（3）分支指令跳转的目地指令开始
+B0
+0: iconst_1
+1: istore_1
+B1
+2: iload_0
+3: ifle 17
+B2
+6: iload_1
+7: iload_0
+8: imul
+9: istore_1
+10: iload_0
+11: iconst_1
+12: isub
+13: istore_0
+14: goto       2
+B3
+17: iload_1
+18: ireturn
+
+B0: _stores_to_locals=01 B2: _stores_to_locals=11 other: _stores_to_locals=00 从左到右表示是否对locals有写入，1为有写入
+_bci_block_start = 1010001000000000010
+从左到右打印位的信息。也就是最左边为第一位。第1位、第3位、第7位和第18位上的值为1，表示对应的字节码下标索引的0、2、6和17位置，这几个位置将整个字节码分为到了4个基本块中
+
+-XX:+PrintInitialBlockList
+----- initial block list of BlockListBuilder for method com.test.CompilationDemo::fact
+1: B0 bci: 0    preds:0 std     sux: B1
+2: B1 bci: 2    preds:2 lh      sux: B2 B3
+3: B2 bci: 6    preds:1         sux: B1
+4: B3 bci: 17   preds:1
+其中std表示BlockBegin::std_entry_flag，lh表示BlockBegin::parser_loop_header_flag，preds表示多少个前置块
+
+第67篇-C1编译器实例-获取活跃集
+void MethodLiveness::BasicBlock::propagate(MethodLiveness *ml) {
+    // 进行或操作（任何一个位上值为1时，_entry对应位上的值就会变为1），
+    // _entry属性保存块开始的活跃信息，_entry与_normal_exit的大小一定相同
+    _entry.set_union(_normal_exit);
+    // 当对应的位上不同并且this这个位必须为1时，最终才会将_entry中的对应位置为1
+    _entry.set_difference(_kill); 
+    _entry.set_union(_gen);
+
+    // Note that we merge information from our exceptional successors
+    // just once, rather than（而不是） at individual bytecodes.
+    _entry.set_union(_exception_exit);
+
+    int i;
+    for  (i=_normal_predecessors->length()-1; i>=0; i--) {
+        BasicBlock *block = _normal_predecessors->at(i);
+        // 处理前驱结点的_normal_exit属性，这个属性与它的后继节点的_entry属性取并集
+        // 注意这里会改变前驱节点的_normal_exit的值，返回的值为true时，表示有变化
+        if  (block->merge_normal(_entry)) { 
+              ml->work_list_add(block);
+        }
+    }
+    for  (i=_exception_predecessors->length()-1; i>=0; i--) {
+        BasicBlock *block = _exception_predecessors->at(i);
+        if  (block->merge_exception(_entry)) {
+              ml->work_list_add(block);
+        }
+    }
+}
+当异常的或正常的前驱节点的_normal_exit或_exception_exit与当前基本块的入口Entry不相等时，说明前驱节点的信息需要更新，将其放到MethodLiveness::work_list列表中
+
+MethodLiveness::_block_list属性中存储的基本块顺序:B1B2B3B0，调用propagate_liveness()函数计算活跃性信息时，会逆序遍历_block_list中的值
+B0:
+** Visiting block at 0  ** [0为字节码的开始索引]
+===================================================================
+    Block start:        0, limit:        2
+    Normal predecessors ( 0) @ [括号中的0表示前驱节点的个数为0]
+    Exceptional predecessors ( 0) @ [括号中的0表示异常前驱节点的个数为0]
+    Normal Exit : Bitmap(2):00          [括号中的2表示Bitmap的大小为2,从左到右打印第1位到第2位的值] 执行完B1变为了11
+    Gen : Bitmap(2):00
+    Kill : Bitmap(2):01          [在向本地变量表中执行存储相关指令时会在Kill中记录，在这里是istore_1指令]
+    Exception Exit:  Bitmap(2):00
+    Entry : Bitmap(2):00          [Entry保存的是块开始的活跃信息]
+根据如上函数的逻辑最终计算出的当前块的Entry为00，也就是2个变量在进入基本块时都不需要是活跃的
+B3:
+** Visiting block at 17  **
+===================================================================
+    Block start:      17, limit:      19
+    Normal predecessors ( 1) @ 2  [@后面的2表示前驱节点的字节码开始索引]
+    Exceptional predecessors ( 0) @
+    Normal Exit : Bitmap(2):00
+    Gen : Bitmap(2):01                  [在从本地变量表中加载值时会记录到Gen，在这里是iload_1]
+    Kill : Bitmap(2):00
+    Exception Exit:  Bitmap(2):00
+    Entry : Bitmap(2):01
+B3的前驱为B1，所以B3的Entry与B1的_normal_exit进行union后，导致B1的_normal_exit的值变为01，所以会将B1添加到MethodLiveness::_work_list中，由于B1还在这个MethodLiveness::_work_list列表中，所以没做什么操作
+B2:
+** Visiting block at 6  **
+===================================================================
+    Block start:        6, limit:      17
+    Normal predecessors ( 1) @ 2
+    Exceptional predecessors ( 0) @
+    Normal Exit : Bitmap(2):00        // 执行完B1后变为11
+    Gen : Bitmap(2):11
+    Kill : Bitmap(2):00
+    Exception Exit:  Bitmap(2):00
+    Entry : Bitmap(2):11
+B2的前驱为B1，而B2的Entry为11，所以B1的_normal_eixt的值变为11。由于B1还在MethodLiveness::_work_list列表中，所以没做什么操作
+对于Gen(11)的计算：
+    第2位为6:iload_1指令产生
+    第1位为7:iload_0指令产生
+    10:iload_0指令由于上一个指令7:iload_0而没有产生效果
+对于Kill(00)的计算：
+    9:istore_1由于Gen(11)的存在而没有产生效果
+    13:istore_0由于Gen(11)的存在而没有产生效果
+B1:
+** Visiting block at 2  **
+===================================================================
+    Block start: 2, limit: 6
+    Normal predecessors ( 2) @ 6        0    // B1块中有2个前驱，分别以字节码6和0开头
+    Exceptional predecessors ( 0) @
+    Normal Exit      : Bitmap(2):11        // 执行B3时变为了01,执行B2时变为了11
+    Gen : Bitmap(2):10        [从本地变量表中加载值时会生成Gen，第1位的值是2:iload_0指令产生]
+    Kill : Bitmap(2):00
+    Exception  Exit: Bitmap(2):00
+    Entry : Bitmap(2):11
+B1的前驱为B0(Normal Exit=00)和B2(Normal Exit=00)，因为B1的Entry为11，所以B0与B2的_normal_exit为11。B0和B2的值改变了并且B0已经不在MethodLiveness::_work_list中，所以重新添加到这个列表中
+对有变化的块进行遍历(B0和B2)
+
+第68篇-C1编译器实例-标示循环结构
+int BlockListBuilder::mark_loops(BlockBegin* block) {
+    int block_id = block->block_id();
+
+    if  (_visited.at(block_id)) {
+        if  (_active.at(block_id)) {
+            // 通过循环的回边找到了已经遍历过的基本块，这个块就是循环的头节点
+            make_loop_header(block);
+        }
+        // 这个返回值会改变loop_state局部变量的值
+        return  _loop_map.at(block_id);  
+    }
+
+
+    // 在遍历后继节点之前设置_visited和_active属性值
+    _visited.set_bit(block_id);
+    _active.set_bit(block_id);
+
+    intptr_t loop_state =  0;
+    for  (int i = block->number_of_sux() -  1; i >=  0; i--) {
+        // 深度递归遍历控制流程图
+        BlockBegin* bb = block->sux_at(i);
+        // 需要注意loop_state值的更新
+        loop_state |= mark_loops(bb);  
+    }
+
+    // 在所有的后继节点遍历完成后清除_active中基本块对应的值
+    _active.clear_bit(block_id);
+
+    // 设置_depth_first_number，表示在深度优先遍历中块的编号
+    block->set_depth_first_number(_next_block_number);  
+    _next_block_number--;
+
+    if  (loop_state !=  0  ) {
+                // block is contained at least in one loop, so phi functions are necessary
+      // 获取BlockBegin类的_stores_to_locals属性的值
+      BitMap bm1 = block->stores_to_locals();  
+
+      IRScope* irscope = scope();
+      // bit is set if phi functions at loop headers are necessary for a local variable
+      BitMap bm2 = irscope->requires_phi_function();
+
+      // 会更新bm2的值，这个逻辑在后面生成HIR指令Phi时非常重要
+      bm2.set_union(bm1);
+    }
+
+    if  (block->is_set(BlockBegin::parser_loop_header_flag)) {
+        int header_loop_state = _loop_map.at(block_id);
+        // 在header_loop_state所表示的位上如果为1,则loop_state上对应位会变为0
+        if  (header_loop_state >=  0) {
+            clear_bits(loop_state, header_loop_state);
+        }
+    }
+
+    // 记录循环相关的信息
+    _loop_map.at_put(block_id, loop_state);  
+    return  loop_state;
+}
+如上函数的实现逻辑为：从控制流图的开始节点进行遍历，将遍历到的基本块标示到_visited和_active中，不过_visited不会清除，而如果一个基本块的后继节点都遍历完成时，_active会清除。当遍历到一个基本块，而这个基本块已经是_active时，就表示我们已经通过回边找到了循环的首节点，给这个基本块标示BlockBegin::parser_loop_header_flag标志
+对于实例来说，处理各个基本块的过程如下：
+B0：_visited=1、_active=1
+B1：_visited=1、_active=1
+B3：_visited=1、_active=1
+由于B3块没有后继节点，所以_active=0、_depth_first_number=4、_loop_map[block_id:3=loop_state:0]
+B2：_visited=1、_active=1
+由于B2的后继节点B1已经被处理过，所以为B1设置BlockBegin::parser_loop_header_flag且_loop_map[block_id:1=loop_state:1]，这样就表示B1块是循环的开始节点，_active=0、_depth_first_number=3、_loop_map[block_id:2=loop_state:1]
+B1：_active=0、_depth_first_number=2、_loop_map[block_id:1=loop_state:0]
+B0：_active=0、_depth_first_number=1、_loop_map[block_id:0=loop_state:0]
+其中的_loop_depth与_loop_index值在这里没有进行计算，后面会进行计算。这里最重要的就是给各个基本块赋值了_depth_first_number，并且为B1块标示了BlockBegin::parser_loop_header_flag
+
+第69篇-C1编译器HIR指令介绍
+HIR指令包含基本的算术和逻辑操作指令，加载和存储字段以及数组相关指令，类型转换指令、调用方法的指令，另外还有类型检查、同步、分配内存和异常处理这些指令
+BlockBegin、BlockEnd：
+在一个基本块中，总是以BlockBegin指令开始，BlockEnd或其子类指令结束，这两个HIR指令都会继承自StateSplit类，StateSplit类的定义如下：
+其中的ValueStack表示执行到此HIR指令时的局部变量表和操作数栈的状态
+
+在一个基本块中，可通过BlockBegin来找到基本块的前驱和后继节点，这些信息存储在_predecessors和_successors中；
+BlockBegin通过_end属性直接引用到表示当前块的BlockEnd，而BlockEnd通过_block属性引用当前块的BlockBegin。有了这些属性，我们就能快速的遍历控制流程图了。
+由于Instruction中定义了_next属性，所以如果一个基本块中有多个指定，这些指令通过_next属性连接为单链表结构。
+
+Phi：
+对于冗余的赋值，传统的编译器需要借助数据流分析，从后至前依次确认哪些变量的值被覆盖（kill）掉。不过，如果借助了 SSA IR，编译器则可以通过查找赋值了但是没有使用的变量来识别冗余赋值。
+SSA IR 对其他优化方式也有很大的帮助，例如常量折叠（constant folding）、常量传播（constant propagation）、强度削减（strength reduction）以及死代码删除（dead code elimination）等。
+如果一个基本块有多个前驱，那么C1编译器会创建Phi指令。
+
+Op2：
+class  Op2:  public  Instruction {
+  private:
+    Bytecodes::Code _op;
+    Value _x;
+    Value _y;
+    // ...
+}
+typedef Instruction* Value;
+指令其实代表着运算和运算得到的值，我们可以通过指针来引用对应的操作数，而这些操作数本身就是指令，这样就将数据流图内嵌到了HIR指令中。
+
+C1编译器会将Java字节码转换成一张包含控制流和数据流的IR图，每个字节码对应其中的若干个节点(注意，有些字节码并没有对应的IR节点)。然后即时编译器在IR图上进行优化(图算法)，输出转换后的IR图。
+
+第70篇-创建HIR指令
