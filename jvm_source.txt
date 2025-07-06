@@ -2819,6 +2819,18 @@ void Compilation::build_hir() {
   _hir->compute_use_counts(); 
 }
 HIR的创建过程主要是创建控制流图和基本块:
+IR::IR()
+IRScope::IRScope()
+IRScope::build graph()
+GraphBuilder::GraphBuilder()
+    BlockListBuilder::BlockListBuilder()
+        BlockListBuilder::set_entries(osr bci)
+        BlockListBuilder::set_leaders()
+            MethodLiveness::MethodLiveness()
+        BlockListBuilder::mark_loops()
+    GraphBuilder::state_at_entry()
+    GraphBuilder::iterate_all_blocks()
+    GraphBuilder::setup_start_block()
 在BlockListBuilder类的构造函数中调用了3个函数，分别是创建控制流图的首个基本块，创建所有基本块以及标出循环相关信息。
 在MethodLiveness类的构造函数中也会调用3个函数，分别是初始化基本块，计算块中的活跃集以及传播活跃集。
 
