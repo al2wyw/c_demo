@@ -1,0 +1,33 @@
+第2章 二分模型
+oop - Klass 表示Java的对象和类。oop(ordinary object pointer)
+2.1 Klass
+-XX：+PrintFieldLayout
+InstanceKlass所占用的内存分布:
+InstanceKlass本身占用的内存
+vtable
+itable
+nonstatic_oop_map
+接口的实现类(接口类专属)
+宿主类(host_klass,匿名类专属)
+
+java.lang.Class类 -> InstanceMirrorKlass
+java.lang.Class对象 ->    oop
+                          | mirror
+java.lang.Object类 -> InstanceKlass
+
+2.2 oop
+_mark       对象头
+_metadata   Klass指针
+field data  对象字段数据
+padding     对齐填充
+
+2.3 Handle句柄
+handle_area(arena) and chunk
+
+第3章 类的加载
+引导类加载器(bootstrap classloader) 由C++编写，负责将<JAVA_HOME>/ib 目录、-Xbootclasspath选项指定的目录和系统属性sun.boot.class.path指定的目录下的核心类库加载到内存中.
+
+扩展类加载器由 sun.misc.Launcher$ExtClassLoader类实现，负责将<JAVA_HOME>/lib/ext目录或者由系统变量-Djava.ext.dir指定的目录中的类库加载到内存中。
+
+应用类加载器由 sun.misc.Launcher$AppClassLoader类实现，负责将系统环境变量-classpath、-cp和系统属性java.class.path指定的路径下的类库加载到内存中。
+
