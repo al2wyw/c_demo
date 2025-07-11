@@ -64,10 +64,29 @@ int template_malloc() {
     return fun();
 }
 
+int template_stk() {
+    size_t size = getpagesize();
+    char arr[size];
+    void* temp = &arr;
+    printf("temp addr %p\n", temp);
+    temp = (void *)align_size_up_((intptr_t)temp, size);
+    printf("temp addr %p\n", temp);
+    int err = mprotect(temp, size, PROT_READ | PROT_WRITE | PROT_EXEC);//必须pagesize对齐
+    if (err != 0) {
+        printf("mprotect err %s\n", strerror(errno));
+        return 0;
+    }
+    memcpy(temp, code, sizeof(code));
+    p_fun fun=temp;
+    //通过函数指针调用
+    return fun();
+}
+
 // c++通过dlsym可以实现热替换，但是需要在代码里面显式调用dlsym
 void main() {
     int obj = new();
     int obj2 = template_new();
     int obj3 = template_malloc();
-    printf("%d, %d, %d\n", obj, obj2, obj3);
+    int obj4 = template_stk();
+    printf("%d, %d, %d, %d\n", obj, obj2, obj3, obj4);
 }
