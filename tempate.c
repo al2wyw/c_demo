@@ -2,11 +2,16 @@
 // Created by 李扬 on 2025/6/26.
 //
 
+#include <errno.h>
 #include <stdio.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <memory.h>
 #include <stdlib.h>
+
+#define align_size_up_(size, alignment) (((size) + ((alignment) - 1)) & ~((alignment) - 1))
+#define align_size_down_(size, alignment) ((size) & ~((alignment) - 1))
+#define is_size_aligned_(size, alignment) ((size) == (align_size_up_(size, alignment)))
 
 //函数指针
 typedef int (*p_fun)();
@@ -36,6 +41,8 @@ int template_new() {
         0 //offset
     );
 
+    printf("temp addr %p\n", temp);
+
     memcpy(temp, code, sizeof(code));
     p_fun fun=temp;
     return fun();
@@ -43,10 +50,13 @@ int template_new() {
 
 int template_malloc() {
     size_t size = getpagesize();
-    void *temp = malloc(size);//不是任意地址都可以，必须要有PROT_EXEC
-    int err = mprotect(temp, size, PROT_READ | PROT_WRITE | PROT_EXEC);
+    void *temp = malloc(size * 2);//不是任意地址都可以，必须要有PROT_EXEC
+    printf("temp addr %p\n", temp);
+    temp = (void *)align_size_up_((intptr_t)temp, size);
+    printf("temp addr %p\n", temp);
+    int err = mprotect(temp, size, PROT_READ | PROT_WRITE | PROT_EXEC);//必须pagesize对齐
     if (err != 0) {
-        printf("mprotect err %d\n", err);
+        printf("mprotect err %s\n", strerror(errno));
         return 0;
     }
     memcpy(temp, code, sizeof(code));
