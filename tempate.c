@@ -35,15 +35,29 @@ int template_new() {
         -1, //fd
         0 //offset
     );
-    //void *temp = malloc(getpagesize());//不是任意地址都可以，必须要有PROT_EXEC
 
     memcpy(temp, code, sizeof(code));
-    p_fun fun=code;
+    p_fun fun=temp;
     return fun();
 }
+
+int template_malloc() {
+    size_t size = getpagesize();
+    void *temp = malloc(size);//不是任意地址都可以，必须要有PROT_EXEC
+    int err = mprotect(temp, size, PROT_READ | PROT_WRITE | PROT_EXEC);
+    if (err != 0) {
+        printf("mprotect err %d\n", err);
+        return 0;
+    }
+    memcpy(temp, code, sizeof(code));
+    p_fun fun=temp;
+    return fun();
+}
+
 // c++通过dlsym可以实现热替换，但是需要在代码里面显式调用dlsym
 void main() {
     int obj = new();
     int obj2 = template_new();
-    printf("%d, %d\n", obj, obj2);
+    int obj3 = template_malloc();
+    printf("%d, %d, %d\n", obj, obj2, obj3);
 }
