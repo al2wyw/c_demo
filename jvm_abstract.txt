@@ -4,7 +4,7 @@ setup args to rdi rsi etc.
 save bcp to stack
 save rsp rbp to thread
 
-call jvm native address (save res to thread)
+call jvm native address (save res to thread) ****
 
 clear rsp rbp from thread
 check pending exceptions
@@ -27,7 +27,7 @@ test receiver
 save rsp to stack
 
 find method target via vtable (optional)
-jmp from_interpreted_entry address:
+jmp from_interpreted_entry address: ****
     leaveq by return inst (mov rbp to rsp, pop rbp)
 
 jmp invoke_return_entry address:
@@ -43,7 +43,7 @@ push return address from rax
 setup args to reg and stack
 save Method* to JavaThread::_callee_target
 move Method* to rax
-jmp from_compiled_entry address
+jmp from_compiled_entry address ****
 
 ** invoke_native routine:
 
@@ -60,18 +60,29 @@ move receiver from r11 to stack(oop temp)
 move JavaThread::jni_environment to rdi
 save rsp rbp last_pc to thread
 move _thread_in_native to thread
-call Method::native_function
+call Method::native_function ****
 
 push rax
 move _thread_in_native_trans to thread
 serialize_memory ???
 
-check safe point and pending exception
+check safe point and pending suspend requests
 
 move _thread_in_Java to thread
 clear rsp rbp last_pc from thread
 clear JavaThread::active_handles::_top
 
+check result type of result_handler is T_OBJECT
+    move rsp to rax
+    deref rax(type of jobject) and store it to stack(oop temp and rsp)
+
+check stack overflow
+check pending exception
+check whether unlock
+
+call result_handler
+restore rsp and rbp
+jmp return address
 ...
 
 
