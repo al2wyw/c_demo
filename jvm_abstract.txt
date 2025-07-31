@@ -87,23 +87,9 @@ jmp return address
 
 
 
-from_interpreted_entry 和 from_compiled_entry 都是 jmp 过去的
+from_interpreted_entry 和 from_compiled_entry 都是 jmp 过去的，无论是解析和编译执行
 解析和编译最终都是调用LinkResolver::resolve_invoke
 方法调用是一个相对昂贵的操作，每次方法调用都需要经历查找、验证和跳转等步骤。为了优化这一过程，JVM引入了内联缓存(Inline Cache)技术
 code patching 动态二进制插桩技术
 
-把 caller 的pc改成call method entry address ???
-
-// resolve virtual call and update inline cache to monomorphic
-JRT_BLOCK_ENTRY(address, SharedRuntime::resolve_virtual_call_C(JavaThread *thread ))
-
-// Resolve a virtual call that can be statically bound (e.g., always
-// monomorphic, so it has no inline cache).  Patch code to resolved target.
-JRT_BLOCK_ENTRY(address, SharedRuntime::resolve_opt_virtual_call_C(JavaThread *thread))
-
-// 需要进行类检测的入口
-address           _entry_point;
-// 没有类检查的入口
-address           _verified_entry_point;
-每个Method有两个实际入口，一个是unverified entry point（UEP），用于实现虚方法分派的monomorphic inline cache；另一个是verified entry point（VEP），是方法的真正入口。
-只有需要虚方法分派的方法才会有独立的UEP；对静态方法、私有成员方法之类的Java方法，UEP与VEP实际上在同一个位置，后面还会详细介绍UEP与VEP
+CompiledIC通过code patching把 caller(last frame) 的pc改成call method entry address(UEP)，从而避免调用LinkResolver::resolve_invoke

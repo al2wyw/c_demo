@@ -8,10 +8,12 @@ p &((struct_name *)0)->member_name 显示字段的偏移量(在ptype /o 无效�
 constMethod 的 name index 对应class文件的常量池可以找到方法名称
 
 gdb --args ~/linux-x86_64-normal-server-slowdebug/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:+PrintInterpreter -XX:-ProfileInterpreter -Djava.library.path=/java/classes/native jvm.FrameTest
+gdb --args ~/linux-x86_64-normal-server-slowdebug/jdk/bin/java -Xcomp -XX:+UnlockDiagnosticVMOptions -XX:+TraceCompiledIC -XX:CompileCommand=compileonly,*InlineCompileOptTest.* -XX:CompileCommand=compileonly,*Adder.* -XX:CompileCommand=dontinline,*Adder.* -XX:+LogCompilation -XX:LogFile=./mylogfile.log -XX:+PrintAssembly -XX:+PrintStubCode  jvm.InlineCompileOptTest
 
 p/x (Method*)($rbp-0x18)
 x/16s $8->name()->base()
 
+CompiledIC::internal_set_ic_destination
 LinkResolver::resolve_invoke
 Java_jvm_FrameTest_nativeCall
 
