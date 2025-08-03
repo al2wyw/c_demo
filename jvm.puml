@@ -48,8 +48,9 @@ CHeapObj --|> AllocatedObj
 CompilationResourceObj --|> AllocatedObj
 note left of AllocatedObj
 StackObj is allocated on stack, no new operator;
-ResourceObj is allocated on arena/resource area/c heap ???;
+ResourceObj is allocated on arena/resource area/c heap/embedded stack ???;
 CHeapObj is allocated by c heap (malloc and free);
+ResourceArea is mainly in Thread;
 end note
 
 Arena --|> CHeapObj
@@ -57,6 +58,14 @@ ResourceArea --|> Arena
 Chunk --|> CHeapObj
 Metaspace --|> CHeapObj
 CollectedHeap --|> CHeapObj
+SharedHeap --|> CollectedHeap
+GenCollectedHeap --|> SharedHeap
+G1CollectedHeap --|> SharedHeap
+Generation --|> CHeapObj
+CardGeneration --|> Generation
+TenuredGeneration --|> CardGeneration
+ConcurrentMarkSweepGeneration --|> CardGeneration
+DefNewGeneration --|> Generation
 
 Parker ..|> PlatformParker
 ParkEvent ..|> PlatformEvent

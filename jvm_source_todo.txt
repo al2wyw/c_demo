@@ -1,6 +1,3 @@
-更新引用字段时，通过屏障将对应的卡表项标记为脏
-The expression stack grows down incrementally, so the normal guard page mechanism will work for that
-
 内存分配和回收，new指令(在基础篇)
 synchronized锁和monitor指令
 
@@ -61,3 +58,36 @@ get value from field
 
 volatile_barrier:
 if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额外操作
+
+内存分配及回收:
+卡表、偏移表、写屏障(内存写入拦截器，例如更新卡表为脏)
+
+类初始化内存分配
+ClassFileParser::parseClassFile ->  InstanceKlass::allocate_instance_klass
+                                    java_lang_Class::create_mirror
+对象初始化内存分配
+UseTLAB -> allocate on TLAB
+allow_shared_alloc -> allocate on Edan via cmpxchg
+slow_case -> InterpreterRuntime::_new -> InstanceKlass::allocate_instance
+
+YGC
+GenCollectedHeap::do_collection -> Generation::collect -> GenCollectedHeap::gen_process_roots(根直接引用)-> GenCollectedHeap::process_roots(年轻代)
+                                                                                                       -> CardTableRS::younger_refs_iterate(年老代)
+                                                       -> FastEvacuateFollowersClosure::do_void(根间接引用)
+GenCollectedHeap::process_roots:
+•Universe::oops_do（）：主要是将 Universe:initialize_basic_type_mirrors（）函数中创建基本类型的 mirror 的 instanceOop 实例（表示 java.lang.Class 对象）作为根遍历。
+•JNIHandles::oops_do（）：遍历全局 JNI 句柄引用的 oop。
+•Threads::possibly_parallel_oops_do（）或 Threads::oops_do（）：这两个函数会遍历 Java 的解释栈和编译栈。Java 线程在解释执行 Java 方法时，每个 Java 方法对应一个调用栈帧，这些栈桢的结构基本固定，栈帧中含有本地变量表。
+另外，在一些可定位的位置上还固定存储着一些对 oop 的引用（如监视器对象），垃圾收集器会遍历这些解释栈中引用的o0p 并进行处理。Java 线程在编译执行 Java 方法时，编译执行的汇编代码是由编译器生成的，同一个方法在不同的编译级别下产生的汇编代码可能不一样，因此编译器生成的汇编代码会使用一个单独的 OopMap记录栈帧中引用的 oop，以保存汇编代码的 CodeBlob 通过 OopMapSet 保存的所有 OopMap，可通过栈帧的基地址获取对应的 OopMap，然后遍历编译栈中引用的所有 oop。
+•ObjectSynchronizer::oops_do（）：ObjectSynchronizer 中维护的与监视器锁关联的 oop。
+•FlatProfiler::oops_do（）：遍历所有线程中的 ThreadProfiler，在 OpenJDK 9 中已弃用 FlatProfiler。
+•Management::oops_do（）：MBean 所持有的对象。
+•JvmtiExport:oops_do（）：JVMTI 导出的对象、断点或者对象分配事件收集器的相关对象。
+•SystemDictionary::oops_do（）或 SystemDictionary:always_strong_oops_do（）：System Dictionary 是系统字典，记录了所有加载的 Klass，通过 Klass 名称和类加载器可以唯一确定一个 Klass 实例。
+•ClassLoaderDataGraph::oops_do（）或 ClassLoaderDataGraph:always_strong_oops_do（）：每个 ClassLoader 实例都对应一个 ClassLoaderData，后者保存了前者加载的所有 Klass、加载过程中的依赖和常量池引用。可以通过 ClassLoaderDataGraph 遍历所有的 ClassLoaderData 实例。
+•StringTable::possibly_parallel_oops_do（）或 StringTable::oops_do（）：StringTable 用来支持字符串驻留。
+•CodeCache::scavenge_root_nmethods_do（）或 CodeCache::blobs_do（）：CodeCache 代码引用。
+
+FastScanClosure(with barrier or with no barrier) 用于ygc复制操作，对象头有转发指针
+
+FGC
