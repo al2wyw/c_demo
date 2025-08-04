@@ -7,11 +7,22 @@ p &((struct_name *)0)->member_name 显示字段的偏移量(在ptype /o 无效�
 
 constMethod 的 name index 对应class文件的常量池可以找到方法名称
 
+p/x (Method*)($rbp-0x18)
+$8 = (Method*) xxxxxxx
+x/16s $8->name()->base()
+
+oop 找到对应的class name:
+(gdb) p *loc
+$20 = (oop) 0xff6a12b8
+p ((InstanceKlass *)($20->compressed_klass_addr()))->_name->as_utf8()
+p $20->klass()->_name->as_utf8()
+(gdb) p $20->klass()->_name (_name可能是脏数据)
+$14 = (Symbol *) 0x7ffff016e4d8
+
 gdb --args ~/linux-x86_64-normal-server-slowdebug/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:+PrintInterpreter -XX:-ProfileInterpreter -Djava.library.path=/java/classes/native jvm.FrameTest
 gdb --args ~/linux-x86_64-normal-server-slowdebug/jdk/bin/java -Xcomp -XX:+UnlockDiagnosticVMOptions -XX:+TraceCompiledIC -XX:CompileCommand=compileonly,*InlineCompileOptTest.* -XX:CompileCommand=compileonly,*Adder.* -XX:CompileCommand=dontinline,*Adder.* -XX:+LogCompilation -XX:LogFile=./mylogfile.log -XX:+PrintAssembly -XX:+PrintStubCode  jvm.InlineCompileOptTest
+gdb --args ~/linux-x86_64-normal-server-slowdebug/jdk/bin/java -Xcomp -XX:+UnlockDiagnosticVMOptions -XX:CompileCommand=compileonly,*testNewArea.* -XX:+LogCompilation -XX:LogFile=./mylogfile.log -XX:+PrintAssembly -XX:+PrintStubCode -Xloggc:./gc.log -XX:+PrintGCDetails -XX:+PrintGCDateStamps -Xms10M -Xmx10M -Xmn6m -XX:SurvivorRatio=8 -XX:+UseSerialGC gc.testNewArea
 
-p/x (Method*)($rbp-0x18)
-x/16s $8->name()->base()
 
 CompiledIC::internal_set_ic_destination
 LinkResolver::resolve_invoke

@@ -60,7 +60,17 @@ volatile_barrier:
 if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额外操作
 
 内存分配及回收:
-卡表、偏移表、写屏障(内存写入拦截器，例如更新卡表为脏)
+卡表、偏移表、写屏障/读屏障 (共同协作以解决跨代引用问题)
+卡表: CardTableRS extends GenRemSet
+卡表是一个字节的集合，每一个字节可以用来表示老年代某一区域中的对象是否持有新生代对象的引用。每个卡表项对应一个卡页，卡页（Card Page）大小为512字节。
+偏移表: BlockOffsetSharedArray
+偏移表记录脏卡页中第一个对象相对卡页开始地址的偏移量
+写(前/后)屏障: CardTableModRefBSForCTRS
+内存写入时的拦截器(执行前置后置动作)，例如内存更新时同时更新卡表为脏
+三色标记法: 黑色(已标记完) 灰色(开始标记) 白色(未标记)
+错标: 原本消亡的对象标记为存活，问题不大，仅产生浮动垃圾
+漏标: 原来存活的对象未被标记，问题严重，其产生的原因(同时命中) 1. 新增黑色到某个白色的引用；2. 删除了全部灰色到白色(1中的白色)的引用
+增量更新解决原因1，原始快照解决原因2 (都是通过写后屏障来实现)
 
 类初始化内存分配
 ClassFileParser::parseClassFile ->  InstanceKlass::allocate_instance_klass
