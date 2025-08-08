@@ -67,6 +67,12 @@ TenuredGeneration --|> CardGeneration
 ConcurrentMarkSweepGeneration --|> CardGeneration
 DefNewGeneration --|> Generation
 
+Space --|> CHeapObj
+ContiguousSpace --|> Space
+EdenSpace --|> ContiguousSpace
+OffsetTableContigSpace --|> ContiguousSpace
+TenuredSpace --|> OffsetTableContigSpace
+
 Parker ..|> PlatformParker
 ParkEvent ..|> PlatformEvent
 note left of PlatformParker

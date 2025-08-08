@@ -76,15 +76,18 @@ if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额�
 ClassFileParser::parseClassFile ->  InstanceKlass::allocate_instance_klass
                                     java_lang_Class::create_mirror
 对象初始化内存分配
-UseTLAB -> allocate on TLAB
+UseTLAB -> allocate on TLAB (TLAB is on edan and allocate new TLAB when it is consumed)
 allow_shared_alloc -> allocate on Edan via cmpxchg
 slow_case -> InterpreterRuntime::_new -> InstanceKlass::allocate_instance
 
-YGC
+YGC: Generation is DefNewGeneration
 GenCollectedHeap::do_collection -> Generation::collect -> GenCollectedHeap::gen_process_roots(根直接引用)-> GenCollectedHeap::process_roots(年轻代)
                                                                                                        -> CardTableRS::younger_refs_iterate(年老代)
                                                        -> FastEvacuateFollowersClosure::do_void(根间接引用)
-GenCollectedHeap::process_roots:
+
+FastScanClosure(with barrier or with no barrier)::do_oop_work 用于ygc复制操作(会判断oop是否在年轻代)，对象头有转发指针，同时写屏障标记年老代卡页是否为脏
+
+GenCollectedHeap::process_roots: (年轻代主要是从各个地方扫描出所有的根oop)
 •Universe::oops_do（）：主要是将 Universe:initialize_basic_type_mirrors（）函数中创建基本类型的 mirror 的 instanceOop 实例（表示 java.lang.Class 对象）作为根遍历。
 •JNIHandles::oops_do（）：遍历全局 JNI 句柄引用的 oop。
 •Threads::possibly_parallel_oops_do（）或 Threads::oops_do（）：这两个函数会遍历 Java 的解释栈和编译栈。Java 线程在解释执行 Java 方法时，每个 Java 方法对应一个调用栈帧，这些栈桢的结构基本固定，栈帧中含有本地变量表。
@@ -98,6 +101,57 @@ GenCollectedHeap::process_roots:
 •StringTable::possibly_parallel_oops_do（）或 StringTable::oops_do（）：StringTable 用来支持字符串驻留。
 •CodeCache::scavenge_root_nmethods_do（）或 CodeCache::blobs_do（）：CodeCache 代码引用。
 
-FastScanClosure(with barrier or with no barrier) 用于ygc复制操作，对象头有转发指针
+CardTableRS::younger_refs_iterate: (年老代主要是从脏卡里的oop的引用中扫描出根oop)
+Filtering_DCTOC::walk_mem_region
+ContiguousSpaceDCTOC::walk_mem_region_with_cl
+oopDesc::oop_iterate
+InstanceKlass::oop_oop_iterate_nv (从InstanceKlass的oop map block快速读取实例所引用的oop)
 
-FGC
+FastEvacuateFollowersClosure::do_void: (年轻代直接从to space开始遍历，跳过eden和from区; 年老代主要是遍历刚刚晋升过来的新oop)
+ContiguousSpace::oop_since_save_marks_iterate_nv
+oopDesc::oop_iterate
+InstanceKlass::oop_oop_iterate_nv
+
+FGC: Generation is TenuredGeneration plus(maybe) DefNewGeneration
+GenCollectedHeap::do_full_collection -> GenCollectedHeap::do_collection -> Generation::collect -> GenMarkSweep::invoke_at_safepoint -> GenMarkSweep::mark_sweep_phase1 标记所有活跃对象 GenCollectedHeap::gen_process_roots -> FollowRootClosure
+                                                                                                                                    -> GenMarkSweep::mark_sweep_phase2 计算所有活跃对象在压缩后的偏移地址 Generation::prepare_for_compaction -> ContiguousSpace::prepare_for_compaction (主要是计算出所有的LiveRange)
+                                                                                                                                    -> GenMarkSweep::mark_sweep_phase3 更新对象的引用地址 GenCollectedHeap::gen_process_roots  -> AdjustPointerClosure (根直接引用)
+                                                                                                                                                                                       GenCollectedHeap::generation_iterate -> AdjustPointersClosure (根间接引用，直接遍历各年代的空间，此时是可解析的)
+                                                                                                                                    -> GenMarkSweep::mark_sweep_phase4 移动所有活跃对象到新的位置 GenCollectedHeap::generation_iterate -> GenCompactClosure
+                                                                                                                                    -> MarkSweep::restore_marks 恢复另存的mark对象头信息到源oop
+                                                                                                                                    -> CardTableRS::invalidate_or_clear 更新卡表信息
+
+FollowRootClosure::do_oop 不会进行年代边界判断，标记完当前oop后调用 follow_contents(oop的引用) 和 follow_stack 进行递归全量标记，同时另存mark对象头信息
+
+LiveRange 存储在死亡对象的开始位置，通过 LiveRange 的start和end可快速定位到下一个活跃对象的区
+                      LiveRange----start-------end
+LiveRange----start-------end
+    |---dead---|---live---|---dead---|---live---|
+
+AdjustPointerClosure::do_oop 更新mark为转发指针，即对象头有转发指针
+
+AdjustPointersClosure::do_space: 批量更新mark为转发指针，即对象头有转发指针
+Space::adjust_pointers
+oopDesc::adjust_pointers
+InstanceKlass::oop_adjust_pointers
+
+GenCompactClosure::do_generation 拷贝旧oop数据到转发地址对应的新地址
+Generation::compact
+CompactibleSpace::compact
+
+CMS:
+CMSCollector::collect_in_background:
+
+CMSCollector::checkpointRootsInitialWork
+
+CMSCollector::markFromRoots
+
+CMSCollector::preclean
+
+CMSCollector::abortable_preclean
+
+CMSCollector::checkpointRootsFinal
+
+CMSCollector::sweep
+
+G1:
