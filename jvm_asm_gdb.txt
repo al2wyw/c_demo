@@ -14,7 +14,6 @@ x/16s $8->name()->base()
 oop 找到对应的class name:
 (gdb) p *loc
 $20 = (oop) 0xff6a12b8
-p ((InstanceKlass *)($20->compressed_klass_addr()))->_name->as_utf8()
 p $20->klass()->_name->as_utf8()
 (gdb) p $20->klass()->_name (_name可能是脏数据)
 $14 = (Symbol *) 0x7ffff016e4d8
