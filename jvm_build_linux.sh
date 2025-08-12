@@ -64,8 +64,7 @@ if [ $? -eq 0 ]; then
   compiledb make CONF=linux-x86_64-normal-server-slowdebug
 fi
 
-# https://blog.csdn.net/tjiyu/article/details/53725247
-# https://developer.aliyun.com/mirror/
+# refer to jvm_build_zero_linux.sh, this build script is deprecated
 
 # Configuration summary:
 # * Debug level:    slowdebug

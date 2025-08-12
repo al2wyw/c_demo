@@ -55,7 +55,12 @@ unset CLASSPATH
 # 调试信息时需要的objcopy，加上这个，就不用在configure中添加了
 export OBJCOPY=objcopy
 
+# 参数DEBUG_BINARIES=true用于解决高版本gcc不支持stabs，
+# 不加可能会报错：cc1plus: error: the "stabs" debug format cannot be used with pre-compiled headers [-Werror=deprecated]
 # /root/openjdk/hotspot/make/linux/makefiles/gcc.make -Werror -> -Wno-error 干掉所有的warning异常
+
+# Error: time is more than 10 years from present: 1388527200000 at build.tools.generatecurrencydata.GenerateCurrencyData.makeSpecialCaseEntry(GenerateCurrencyData.java:285)
+
 export LIBFFI_CFLAGS='-I/usr/include'
 export LIBFFI_LIBS='-L/usr/lib64 -lffi'
 
@@ -64,12 +69,14 @@ CONFIG_RET=$?
 
 sleep 3
 
-# 参数DEBUG_BINARIES=true用于解决高版本gcc不支持stabs，
-# 不加可能会报错：cc1plus: error: the "stabs" debug format cannot be used with pre-compiled headers [-Werror=deprecated]
-# compiledb denpands on clang env
-if [ $CONFIG_RET -eq 0 ]; then
-  compiledb make CONF=linux-x86_64-normal-zero-slowdebug
+if [ $? -eq 0 ]; then
+  make CC_INTERP=true CONF=linux-x86_64-normal-zero-slowdebug ZIP_DEBUGINFO_FILES=0
 fi
+
+# compiledb denpands on clang env
+# if [ $CONFIG_RET -eq 0 ]; then
+#   compiledb make CC_INTERP=true CONF=linux-x86_64-normal-zero-slowdebug
+# fi
 
 # can not debug: unzip all libjvm.diz
 # /usr/bin/objcopy --only-keep-debug libjvm.so libjvm.debuginfo
@@ -79,7 +86,10 @@ fi
 # rm -f libjvm.debuginfo
 
 # https://blog.csdn.net/tjiyu/article/details/53725247
+# https://www.cnblogs.com/shaw-me/p/5133273.html
 # https://developer.aliyun.com/mirror/
+
+# most important: ./configure --with-debug-level=slowdebug --enable-debug-symbols ; make ZIP_DEBUGINFO_FILES=0
 
 # Configuration summary:
 # * Debug level:    slowdebug
@@ -92,16 +102,17 @@ fi
 # * C Compiler:     gcc (GCC) 4.8.5 20150623 (Red Hat-44) version 4.8.5-44) (at /usr/bin/gcc)
 # * C++ Compiler:   g++ (GCC) 4.8.5 20150623 (Red Hat-44) version 4.8.5-44) (at /usr/bin/g++)
 #
-# GNU Make 3.82
-# Built for x86_64-redhat-linux-gnu
-
+# Build performance summary:
+# * Cores to use:   7
+# * Memory limit:   7802 MB
+# * ccache status:  not installed (consider installing)
 
 # yum list libXtst-devel libXt-devel libXrender-devel cups-devel freetype-devel alsa-lib-devel binutils libffi-devel
-# alsa-lib-devel.x86_64                                       1.1.8-1.el7                                               @base    
+# alsa-lib-devel.x86_64                                       1.1.8-1.el7                                               @base
 # binutils.x86_64                                             2.27-44.base.el7                                          @anaconda
-# cups-devel.x86_64                                           1:1.6.3-51.el7                                            @base    
-# freetype-devel.x86_64                                       2.8-14.el7_9.1                                            @updates 
-# libXrender-devel.x86_64                                     0.9.10-1.el7                                              @base    
-# libXt-devel.x86_64                                          1.1.5-3.el7                                               @base    
-# libXtst-devel.x86_64                                        1.2.3-1.el7                                               @base    
+# cups-devel.x86_64                                           1:1.6.3-51.el7                                            @base
+# freetype-devel.x86_64                                       2.8-14.el7_9.1                                            @updates
+# libXrender-devel.x86_64                                     0.9.10-1.el7                                              @base
+# libXt-devel.x86_64                                          1.1.5-3.el7                                               @base
+# libXtst-devel.x86_64                                        1.2.3-1.el7                                               @base
 # libffi-devel.x86_64                                         3.0.13-19.el7                                             @base
