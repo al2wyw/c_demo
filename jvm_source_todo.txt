@@ -1,4 +1,5 @@
 synchronized锁和monitor指令
+uncommon trap
 DTRACE_MONITOR_PROBE
 
 自研备注:
@@ -8,20 +9,52 @@ BasicObjectLock 轻量级
 ObjectMonitor  重量级(包含自旋)
 
 异常机制
-athrow
-throw xxx exception entry from bytecode asm
-asm inst: test/comp SIGSEGV (只有这里用到了信号)
+athrow      explicit_exception
+TemplateInterpreter::_throw_XXXException_entry from bytecode asm    explicit_exception
+StubRoutines::_throw_XXXException_entry from compiled asm    explicit_exception
+asm inst: test/comp SIGSEGV SIGFPE (这里用到了信号机制)      implicit_exception
 
-xxx exception handler(throw xxx exception entry) => create_exception, jump _throw_exception_entry
-                                                 => throw_exception
-InterpreterRuntime::create_exception => thread->set_vm_result
-InterpreterRuntime::throw_exception => THROW => thread->set_pending_exception (call_VM_base check pending exception and jump forward_exception_entry)
+解释执行:
 athrow => jump _throw_exception_entry
-_throw_exception_entry => jump return of exception_handler_for_exception => the bci address of exception handler table in current java method
-                                                                         => _remove_activation_entry => jump return of exception_handler_for_return_address => _rethrow_exception_entry (include _throw_exception_entry asm code)
-StubRoutines::forward_exception_entry => jump return of SharedRuntime::exception_handler_for_return_address
-JVM_handle_linux_signal => throw xxx exception entry
+xxx exception handler(TemplateInterpreter::_throw_XXXException_entry) => generate_exception_handler => create_exception, jump _throw_exception_entry
+xxx exception handler(TemplateInterpreter::_throw_XXXException_entry) => generate_XXXException_handler => throw_XXXException
+InterpreterRuntime::create_exception => thread->set_vm_result
+InterpreterRuntime::throw_XXXException => THROW => thread->set_pending_exception (call_VM_base check pending exception and jump forward_exception_entry)
+TemplateInterpreter::_throw_exception_entry => jump return of InterpreterRuntime::exception_handler_for_exception => the bci address of exception handler table in current java method or
+                                                                                                                     the _remove_activation_entry => jump return of exception_handler_for_return_address
+StubRoutines::forward_exception_entry => jump return of exception_handler_for_return_address
 InterpreterRuntime::throw_pending_exception do nothing
+
+编译执行:
+C1
+athrow => jmp RuntimeStub - unwind_exception Runtime1 stub => exception_handler_for_return_address
+C2
+athrow => (opt) call UncommonTrapBlob
+       => (deopt) jmp RuntimeStub - _rethrow_Java => exception_handler_for_return_address
+
+Exception Handler C1
+call RuntimeStub - handle_exception_from_callee Runtime1 stub => jmp the return of Runtime1::exception_handler_for_pc => SharedRuntime::compute_compiled_exc_handler
+
+call 0x00007ffff647fdd8 ???
+
+Exception Handler C2
+jmp ExceptionBlob => jmp the return of OptoRuntime::handle_exception_C => SharedRuntime::compute_compiled_exc_handler
+
+SharedRuntime::compute_compiled_exc_handler => the address of exception handler table(不是Exception Handler ???) in current nmethod or
+                                               the address of unwind handler => jmp RuntimeStub - unwind_exception Runtime1 stub
+
+StubRoutines::_throw_XXXException_entry => generate_throw_exception => throw_XXXException, forward_exception_entry
+SharedRuntime::throw_XXXException => Exceptions::_throw => thread->set_pending_exception
+StubRoutines::forward_exception_entry => jump return of exception_handler_for_return_address
+
+公共:
+JVM_handle_linux_signal => (interp) TemplateInterpreter::_throw_XXXException_entry
+                        => (comp) StubRoutines::_throw_XXXException_entry or nmethod::continuation_for_implicit_exception (ImplicitExceptionTable) ???
+
+SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpreter::_rethrow_exception_entry (include _throw_exception_entry asm code)
+                                                    => (comp) nmethod::exception_begin (Exception Handler)
+                                                    => (comp) StubRoutines::_catch_exception_entry for _call_stub_return_address
+
 
 安全点机制
 解析执行进入安全点: InterpreterRuntime::at_safepoint 后续是jvmti的逻辑(JvmtiExport::post_single_step把线程加入到待暂停的列表中，最终会调用JvmtiEnv::SuspendThread函数)
@@ -33,7 +66,8 @@ native执行进入安全点: native方法执行完毕后检查是否要进入安
 在离开block时: ~ThreadBlockInVM() -> transition_and_fence
 
 deopt的过程
-1. SystemDictionary::add_to_hierarchy(class加载导致class hiera改变) -> 进入安全点，push original return addr, patch the return pc to depot handler code
+触发点: class加载导致class hiera改变；redefine class；UncommonTrap exception；...
+1. SystemDictionary::add_to_hierarchy(class hierarchy改变) -> 进入安全点，push original return addr, patch the return pc to depot handler code
 2. depot handler code -> SharedRuntime::generate_deopt_blob   -> Deoptimization::fetch_unroll_info
                                                               -> Deoptimization::unpack_frames
                                                               -> ret (original return addr)

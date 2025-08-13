@@ -124,8 +124,20 @@ ConstantPool ...> ConstantPoolCache
 CodeBlob ..|> _ValueObj
 nmethod ..|> CodeBlob
 RuntimeStub ..|> CodeBlob
+BufferBlob ..|> CodeBlob
+AdapterBlob ..|> BufferBlob
 SingletonBlob ..|> CodeBlob
+DeoptimizationBlob ..|> SingletonBlob
 SafepointBlob ..|> SingletonBlob
+ExceptionBlob ..|> SingletonBlob
+UncommonTrapBlob ..|> SingletonBlob
+
+note bottom of CodeBlob
+RuntimeStub: used to call a (static) C++ runtime routine
+AdapterBlob: used to hold C2I/I2C adapters
+ExceptionBlob: used for exception unwinding by Compiler2
+UncommonTrapBlob: used for rare situation trap handling by Compiler2
+end note
 
 note as common_note
   将src.zip解压后将相应java源代码路径配置到jdk的source path中即可在idea中查看源码
