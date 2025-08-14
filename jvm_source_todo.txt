@@ -26,16 +26,13 @@ StubRoutines::forward_exception_entry => jump return of exception_handler_for_re
 InterpreterRuntime::throw_pending_exception do nothing
 
 编译执行:
-C1
-athrow => jmp RuntimeStub - unwind_exception Runtime1 stub => exception_handler_for_return_address
-C2
-athrow => (opt) call UncommonTrapBlob
-       => (deopt) jmp RuntimeStub - _rethrow_Java => exception_handler_for_return_address
+C1 athrow => jmp RuntimeStub - unwind_exception Runtime1 stub => exception_handler_for_return_address
+C2 athrow => (opt) call UncommonTrapBlob
+          => (deopt) jmp RuntimeStub - _rethrow_Java => exception_handler_for_return_address
 
 Exception Handler C1
 call RuntimeStub - handle_exception_from_callee Runtime1 stub => jmp the return of Runtime1::exception_handler_for_pc => SharedRuntime::compute_compiled_exc_handler
-
-call 0x00007ffff647fdd8 ???
+call 0x00007ffff647fdd8 看源码handle_exception_from_callee应该没有后续这个call调用 ???
 
 Exception Handler C2
 jmp ExceptionBlob => jmp the return of OptoRuntime::handle_exception_C => SharedRuntime::compute_compiled_exc_handler
