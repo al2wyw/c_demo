@@ -1,6 +1,4 @@
 synchronized锁和monitor指令
-uncommon trap
-reallocation
 DTRACE_MONITOR_PROBE
 
 自研备注:
@@ -9,6 +7,7 @@ OopMark  偏向(UseBiasedLocking太复杂)
 BasicObjectLock 轻量级
 ObjectMonitor  重量级(包含自旋)
 
+由于jvm使用code patching技术，所以LogCompilation打印出来的code并不一定是最终执行的code !!!
 异常机制
 athrow      explicit_exception
 TemplateInterpreter::_throw_XXXException_entry from bytecode asm    explicit_exception
@@ -28,7 +27,7 @@ InterpreterRuntime::throw_pending_exception do nothing
 
 编译执行:
 C1 athrow => jmp RuntimeStub - unwind_exception Runtime1 stub => exception_handler_for_return_address
-C2 athrow => (opt) call UncommonTrapBlob
+C2 athrow => (opt) call UncommonTrapBlob => Deoptimization::uncommon_trap(return UnrollBlock*), Deoptimization::unpack_frames, return to interpreter
           => (deopt) jmp RuntimeStub - _rethrow_Java => exception_handler_for_return_address
 
 Exception Handler C1
@@ -38,8 +37,9 @@ call 0x00007ffff647fdd8 看源码handle_exception_from_callee应该没有后续�
 Exception Handler C2
 jmp ExceptionBlob => jmp the return of OptoRuntime::handle_exception_C => SharedRuntime::compute_compiled_exc_handler
 
-SharedRuntime::compute_compiled_exc_handler => the address of exception handler (ExceptionTable is a list of handler addr, handler addr is a code addr in main code not Exception Handler(such like block B1 [16, 38])) in current nmethod or
+SharedRuntime::compute_compiled_exc_handler => the address of exception handler in current nmethod or
                                                the address of unwind handler => jmp RuntimeStub - unwind_exception Runtime1 stub
+                                               (ExceptionTable is a list of handler addr, handler addr is a code addr in main code not Exception Handler(such like block B1 [16, 38]))
 
 StubRoutines::_throw_XXXException_entry => generate_throw_exception => throw_XXXException, forward_exception_entry
 SharedRuntime::throw_XXXException => Exceptions::_throw => thread->set_pending_exception
@@ -47,7 +47,8 @@ StubRoutines::forward_exception_entry => jump return of exception_handler_for_re
 
 公共:
 JVM_handle_linux_signal => (interp) TemplateInterpreter::_throw_XXXException_entry
-                        => (comp) StubRoutines::_throw_XXXException_entry or nmethod::continuation_for_implicit_exception (ImplicitExceptionTable is a map: pc offset (where exception happened) to implicit exception stub addr in main code(such like ImplicitNullCheckStub))
+                        => (comp) StubRoutines::_throw_XXXException_entry or nmethod::continuation_for_implicit_exception
+                        (ImplicitExceptionTable(C2 has no IET) is a map: pc offset (where exception happened) to implicit exception stub addr in main code(such like ImplicitNullCheckStub))
 
 SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpreter::_rethrow_exception_entry (include _throw_exception_entry asm code)
                                                     => (comp) nmethod::exception_begin (Exception Handler)
@@ -69,6 +70,9 @@ deopt的过程
 2. depot handler code -> SharedRuntime::generate_deopt_blob   -> Deoptimization::fetch_unroll_info
                                                               -> Deoptimization::unpack_frames
                                                               -> ret (original return addr)
+uncommon trap(C2特有)
+implicit exception, rare branch hit => jmp other code addr to call UncommonTrapBlob
+对比opt和deopt后的代码好像没有什么区别(除了call UncommonTrapBlob被替换成真正的处理逻辑)，那uncommon trap的机制有什么作用 ???
 
 memory order机制
 four primitive memory barrier operations:
