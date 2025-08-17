@@ -27,7 +27,7 @@ InterpreterRuntime::throw_pending_exception do nothing
 
 编译执行:
 C1 athrow => jmp RuntimeStub - unwind_exception Runtime1 stub => exception_handler_for_return_address
-C2 athrow => (opt) call UncommonTrapBlob => Deoptimization::uncommon_trap(return UnrollBlock*), Deoptimization::unpack_frames, return to interpreter
+C2 athrow => (opt) call UncommonTrapBlob
           => (deopt) jmp RuntimeStub - _rethrow_Java => exception_handler_for_return_address
 
 Exception Handler C1
@@ -37,7 +37,7 @@ call 0x00007ffff647fdd8 看源码handle_exception_from_callee应该没有后续�
 Exception Handler C2
 jmp ExceptionBlob => jmp the return of OptoRuntime::handle_exception_C => SharedRuntime::compute_compiled_exc_handler
 
-SharedRuntime::compute_compiled_exc_handler => the address of exception handler in current nmethod or
+SharedRuntime::compute_compiled_exc_handler => the address of exception handler from ExceptionTable in current nmethod or
                                                the address of unwind handler => jmp RuntimeStub - unwind_exception Runtime1 stub
                                                (ExceptionTable is a list of handler addr, handler addr is a code addr in main code not Exception Handler(such like block B1 [16, 38]))
 
@@ -65,11 +65,23 @@ native执行进入安全点: native方法执行完毕后检查是否要进入安
 在离开block时: ~ThreadBlockInVM() -> transition_and_fence
 
 deopt的过程
-触发点: class加载导致class hiera改变；redefine class；UncommonTrap exception；...
-1. SystemDictionary::add_to_hierarchy(class hierarchy改变) -> 进入安全点，push original return addr, patch the return pc to depot handler code
-2. depot handler code -> SharedRuntime::generate_deopt_blob   -> Deoptimization::fetch_unroll_info
+触发点: class加载导致class hierarchy改变；redefine class；uncommon trap exception；...
+
+class加载导致class hierarchy改变:
+1. SystemDictionary::add_to_hierarchy(class hierarchy改变) -> 进入安全点，VM_Deoptimize::doit -> Deoptimization::deoptimize_dependents
+2. Deoptimization::deoptimize_dependents -> Deoptimization::deoptimize -> frame::deoptimize -> push original return addr, patch the return pc to depot handler code
+3. depot handler code -> SharedRuntime::generate_deopt_blob   -> Deoptimization::fetch_unroll_info(return UnrollBlock*) -> Deoptimization::fetch_unroll_info_helper
                                                               -> Deoptimization::unpack_frames
                                                               -> ret (original return addr)
+
+redefine class:
+1. JvmtiEnv::RedefineClasses or JvmtiEnv::RetransformClasses -> 进入安全点，VM_RedefineClasses::doit -> VM_RedefineClasses::redefine_single_class -> Deoptimization::deoptimize_dependents
+
+uncommon trap exception:
+1. UncommonTrapBlob -> Deoptimization::uncommon_trap(return UnrollBlock*) -> Deoptimization::fetch_unroll_info_helper
+                    -> Deoptimization::unpack_frames
+                    -> return to interpreter
+
 uncommon trap(C2特有)
 implicit exception, rare branch hit => jmp other code addr to call UncommonTrapBlob
 对比opt和deopt后的代码好像没有什么区别(除了call UncommonTrapBlob被替换成真正的处理逻辑)，那uncommon trap的机制有什么作用 ???
