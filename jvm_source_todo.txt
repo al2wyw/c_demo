@@ -83,7 +83,7 @@ uncommon trap exception:
                     -> return to interpreter
 
 uncommon trap(C2特有)
-implicit exception, rare branch hit => jmp other code addr to call UncommonTrapBlob
+implicit exception, rare branch hit(Deoptimization::DeoptReason) => jmp other code addr to call UncommonTrapBlob
 对比opt和deopt后的代码好像没有什么区别(除了call UncommonTrapBlob被替换成真正的处理逻辑)，那uncommon trap的机制有什么作用 ???
 
 memory order机制
