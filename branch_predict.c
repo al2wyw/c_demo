@@ -22,7 +22,7 @@ int main() {
     qsort(data, arraySize, sizeof(int), compareInt);
 
     /*
-    // opt:
+    // opt: 性能提升10%
     for (unsigned c = 0; c < arraySize; ++c)
     {
         if (data[c] < 128)
