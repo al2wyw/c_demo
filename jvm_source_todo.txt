@@ -131,9 +131,11 @@ if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额�
 增量更新解决原因1，原始快照解决原因2 (都是通过写后屏障来实现)
 
 全局内存初始化
+ReservedSpace to reserve virtual address in advance:
 universe_init -> Universe::initialize_heap -> GenCollectedHeap::initialize -> GenCollectedHeap::allocate -> Universe::reserve_heap(return ReservedSpace)
 ReservedSpace::initialize(large is false) -> os::reserve_memory -> mmap(PROT_NONE)
-VirtualSpace(in Generation) holds ReservedSpace to perform commit(os::commit_memory -> mmap(PROT_READ|PROT_WRITE)) and pre-touch
+VirtualSpace holds ReservedSpace to perform commit and pre-touch:
+DefNewGeneration::compute_new_size -> DefNewGeneration::expand -> VirtualSpace::expand_by -> os::commit_memory -> mmap(PROT_READ|PROT_WRITE)
 
 类初始化内存分配
 ClassFileParser::parseClassFile ->  InstanceKlass::allocate_instance_klass
