@@ -25,10 +25,14 @@ TemplateInterpreter::_throw_exception_entry => jump return of InterpreterRuntime
 StubRoutines::forward_exception_entry => jump return of exception_handler_for_return_address
 InterpreterRuntime::throw_pending_exception do nothing
 
-编译执行:
+编译执行(-Xcomp):
 C1 athrow => jmp RuntimeStub - unwind_exception Runtime1 stub => exception_handler_for_return_address
 C2 athrow => (opt) call UncommonTrapBlob
           => (deopt) jmp RuntimeStub - _rethrow_Java => exception_handler_for_return_address
+
+编译执行(正常profile): ???
+C1 athrow
+C2 athrow
 
 Exception Handler C1
 call RuntimeStub - handle_exception_from_callee Runtime1 stub => jmp the return of Runtime1::exception_handler_for_pc => SharedRuntime::compute_compiled_exc_handler
@@ -56,8 +60,8 @@ SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpre
 
 
 安全点机制
-解析执行进入安全点: InterpreterRuntime::at_safepoint 后续是jvmti的逻辑(JvmtiExport::post_single_step把线程加入到待暂停的列表中，最终会调用JvmtiEnv::SuspendThread函数)
-编译执行进入安全点: JVM_handle_linux_signal => SharedRuntime::get_poll_stub => SharedRuntime::polling_page_return_handler_blob()->entry_point()
+解析执行进入安全点: Interpreter::notice_safepoints() => copy_table(&_safept_table, &_active_table) ====> InterpreterRuntime::at_safepoint 后续是jvmti的逻辑(JvmtiExport::post_single_step把线程加入到待暂停的列表中，最终会调用JvmtiEnv::SuspendThread函数)
+编译执行进入安全点: os::make_polling_page_unreadable() => linux_mprotect(addr, size, PROT_NONE) ====> JVM_handle_linux_signal => SharedRuntime::get_poll_stub => SharedRuntime::polling_page_return_handler_blob()->entry_point()
 native执行进入安全点: native方法执行完毕后检查是否要进入安全点 => transition_from_native => JavaThread::check_safepoint_and_suspend_for_native_trans()
 
 获取对象锁、park、sleep被blocked的线程会判断安全点吗？ 会的，io rw不会
