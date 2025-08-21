@@ -1,0 +1,33 @@
+-Xms10M -Xmx100M -Xmn60M -XX:SurvivorRatio=8 -XX:+UseSerialGC
+
+3342336  3.1875
+0xf9c00000 0xfbd50000 34930688 33.3125
+0xf9c00000 0xf9d40000 1310720 1.25
+
+bt
+VirtualSpace::expand_by
+
+p *this
+_low_boundary = 0xf9c00000 , _high_boundary = 0xfbd50000 ,
+  _low = 0xf9c00000 , _high = 0xf9d40000 "", _special = false, _executable = false,
+  _lower_high = 0xf9c00000 , _middle_high = 0xf9d40000 "", _upper_high = 0xfbd50000 , _middle_high_boundary = 0xfbd50000 ,
+  _upper_high_boundary = 0xfbd50000 , _lower_alignment = 4096, _middle_alignment = 4096, _upper_alignment = 4096}
+
+
+p args
+this = 0x7ffff001edd8
+bytes = 3342336
+pre_touch = false
+
+p locals
+previous_high = 0xf9d40000 ""
+unaligned_new_high = 0xfa070000 ""
+unaligned_lower_new_high = 0xf9c00000
+unaligned_middle_new_high = 0xfa070000 ""
+aligned_lower_new_high = 0xf9c00000
+aligned_middle_new_high = 0xfa070000 ""
+lower_needs = 0
+middle_needs = 3342336
+upper_needs = 0
+unaligned_upper_new_high = 0xfa070000 ""
+aligned_upper_new_high = 0xfa070000 ""
