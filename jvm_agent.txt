@@ -1,0 +1,50 @@
+java诊断工具的实现技术:
+堆转储文件，线程栈，perfData，java agent，jvmti agent，service agent，JMX，core dump文件
+
+在Prims模块中:
+JNI: JNI模块提供Java运行时接口(以"jni_"为前缀命名的函数)
+JVM模块: JVM向外提供以"JVM_"为前缀命名的函数，作为标准JNI接口的补充，声明在jvm.h文件中
+JVMTI模块: JVM工具接口提供了一种编程接口，允许开发者对程序进行监控，调试以及事件回调等，声明在jvmti.h文件中
+Perf模块: 是sun.misc.Perf类的底层实现，定义了一些以Perf_为前缀命名的函数，用来监控HotSpot VM内部的PerfData计数器
+services模块: 为JVM提供了JMX等功能，是为支持对Java应用程序进行管理和监控而定义的API，可用来监控系统的运行状态，其中的management模块实现了JMX功能，jmm.h中有一套监控和管理虚拟机接口的jmm接口　
+
+
+
+一、java agent(java instrumentation) JavaAgent的实现基于jvmti,是jvmti agent的一种特例
+启动方式:
+1. -javaagent:xxxx.jar -> premain(String agentArgs, Instrumentation inst)
+2. attach -> VirtualMachine类的attach()方法挂载 -> agentmain(String agentArgs, Instrumentation inst)
+
+JavaAgent使用的注意事项:
+...
+一是JavaAgent代码会影响到目标程序，一定要做好类隔离，可以像BTrace进行改名，也可以像Arthas那样用Spy间谍类避免
+二是JavaAgent会影响目标程序的效率，可能受Class增强时插入的逻辑过多等因素造成，还可能会造成逆优化
+所以需要自适应采集设计，自动调节采集频率以及采集比例控制能力
+
+Attach机制实现:
+...
+
+Instrumentation实现(涉及jvmti):
+...
+
+反射的实现原理:
+...
+
+字节码增强的应用场景:
+1. 链路监控和追踪 2. 性能剖析(Arthas) 3. 安全防控(RASP，IAST，字节码加解密) 4. 测试mock 5. 热部署
+
+字节码增强的工具对比:
+Btrace、jvm-sandbox、Arthas
+
+二、jvm tool interface agent(jvmti)
+
+
+三、serviceability agent(SA)
+jmap、jstack、jinfo等工具可以访问虚拟机中的堆对象、线程信息等，可以通过两种方式实现:
+一种是通过attach: 相关的逻辑实现是在目标虚拟机中运行的，占用目标虚拟机资源，有bug会直接影响到它
+一种是通过SA: 运行在单独的进程中，和目标Java进程是隔离的，不会在目标Java进程中执行任何代码，只是读取目标Java进程中的数据(通过attach方式)，但是在SA读取数据时目标Java进程会被挂起
+sun.tools.jstack.JStack (attach) tools.jar
+sun.jvm.hotspot.tools.JStack (SA) sa-jdi.jar
+
+
+四、java management extension(JMX)

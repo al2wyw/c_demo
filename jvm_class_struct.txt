@@ -1,0 +1,374 @@
+{
+  <Thread> = {
+    <ThreadShadow> = {
+      <CHeapObj<512u>> = {
+        <AllocatedObj> = {
+          _vptr.AllocatedObj = 0x7ffff6f17390 <vtable for JavaThread+16>
+        }, <No data fields>},
+      members of ThreadShadow:
+      _pending_exception = 0x0,
+      _exception_file = 0x0,
+      _exception_line = 0
+    },
+    members of Thread:
+    _real_malloc_address = 0x7ffff000a0e8,
+    _SR_lock = 0x7ffff000b738,
+    _suspend_flags = 0,
+    _num_nested_signal = 0,
+    _active_handles = 0x7ffff00d0688,
+    _free_handle_block = 0x7ffff00e8c98,
+    _last_handle_mark = 0x7ffff7fda840,
+    _oops_do_parity = 0,
+    _allow_safepoint_count = 0,
+    _allow_allocation_count = 0,
+    _skip_gcalot = false,
+    _tlab = {
+      <CHeapObj<512u>> = {
+        <AllocatedObj> = {
+          _vptr.AllocatedObj = 0x7ffff6f17710 <vtable for ThreadLocalAllocBuffer+16>
+        }, <No data fields>},
+      members of ThreadLocalAllocBuffer:
+      _start = 0x76e0000b0,
+      _top = 0x76e0022e0,
+      _pf_top = 0x76e000130,
+      _end = 0x76e002730,
+      _desired_size = 1218,
+      _refill_waste_limit = 19,
+      static _target_refills = 50,
+      _number_of_refills = 1,
+      _fast_refill_waste = 0,
+      _slow_refill_waste = 0,
+      _gc_waste = 0,
+      _slow_allocations = 0,
+
+      _allocation_fraction = {
+        <CHeapObj<1280u>> = {
+          <AllocatedObj> = {
+            _vptr.AllocatedObj = 0x7ffff6f059d0 <vtable for AdaptiveWeightedAverage+16>
+          }, <No data fields>},
+        members of AdaptiveWeightedAverage:
+        _average = 0.929489136,
+        _sample_count = 2,
+        _weight = 35,
+        _is_old = false,
+        static OLD_THRESHOLD = 100,
+        _last_sample = 0.859527588
+      },
+      static _global_stats = 0x7ffff0035528
+    },
+    _allocated_bytes = 511224,
+    _trace_data = {<No data fields>},
+    _vm_operation_started_count = 1,
+    _vm_operation_completed_count = 1,
+    _current_pending_monitor = 0x0,
+    _current_pending_monitor_is_from_java = true,
+    _current_waiting_monitor = 0x0,
+    omFreeList = 0x7fffa8004b80,
+    omFreeCount = 28,
+    omFreeProvision = 49,
+    omInUseList = 0x0,
+    omInUseCount = 0,
+    _visited_for_critical_count = false,
+    _osthread = 0x7ffff000c458,
+    _resource_area = 0x7ffff000aef8,
+    _current_resource_mark = 0x7ffff7fdaaf0,
+    _handle_area = 0x7ffff000b398,
+    _metadata_handles = 0x7ffff000b538,
+    _stack_base = 0x7ffff7fdc000 "",
+    _stack_size = 1048576,
+    _self_raw_id = 0,
+    _lgrp_id = -1,
+    _owned_locks = 0x0,
+    _jvmti_env_iteration_count = 0,
+    _Stalled = 0,
+    _TypeTag = 11181,
+    _ParkEvent = 0x7ffff000b900,
+
+    _SleepEvent = 0x7ffff000bb00,
+    _MutexEvent = 0x7ffff000bd00,
+    _MuxEvent = 0x7ffff000bf00,
+    NativeSyncRecursion = -235802127,
+    _OnTrap = 0,
+    _hashStateW = 1550089733,
+    _hashStateX = 2018699554,
+    _hashStateY = -836430513,
+    _hashStateZ = -2029131186,
+    _schedctl = 0x0,
+    rng = {1113956796, -235802127, -235802127, -235802127}
+  },
+  members of JavaThread:
+  _next = 0x0,
+  _threadObj = 0x76e090d60,
+  _java_call_counter = 1,
+  _anchor = {
+    _last_Java_sp = 0x7ffff7fda4b0,
+    _last_Java_pc = 0x0,
+    _last_Java_fp = 0x0
+  },
+  _entry_point = 0x0,
+  _jni_environment = {
+    functions = 0x7ffff6f2dba0 <jni_NativeInterface>
+  },
+  _deopt_mark = 0x0,
+  _must_deopt_id = 0x0,
+  _deopt_nmethod = 0x0,
+  _vframe_array_head = 0x0,
+  _vframe_array_last = 0x0,
+  _deferred_locals_updates = 0x0,
+  _callee_target = 0x7fffdf179470,
+  _vm_result = 0x0,
+  _vm_result_2 = 0x0,
+  _deferred_card_mark = {
+    _start = 0x0,
+    _word_size = 0
+  },
+  _monitor_chunks = 0x0,
+  _special_runtime_exit_condition = JavaThread::_no_async_condition,
+  _pending_async_exception = 0x0,
+  _thread_state = _thread_in_vm,
+
+  _safepoint_state = 0x7ffff000a038,
+  _saved_exception_pc = 0x0,
+  _terminated = JavaThread::_not_terminated,
+  _suspend_equivalent = false,
+  _in_deopt_handler = 0,
+  _doing_unsafe_access = false,
+  _do_not_unlock_if_synchronized = false,
+  _jni_attach_state = JavaThread::_not_attaching_via_jni,
+  _stack_guard_state = JavaThread::stack_guard_enabled,
+  _exception_oop = 0x0,
+  _exception_pc = 0x0,
+  _exception_handler_pc = 0x0,
+  _is_method_handle_return = 0,
+  _jni_active_critical = 0,
+  _depth_first_number = -235802127,
+  _popframe_condition = 0,
+  _jmp_ring_index = 0,
+  _jmp_ring = {{
+      _target = 0,
+      _instruction = 0,
+      _file = 0x0,
+      _line = 0
+    } <repeats 16 times>},
+  _satb_mark_queue = {
+    <PtrQueue> = {
+      _vptr.PtrQueue = 0x7ffff6f15070 <vtable for ObjPtrQueue+16>,
+      _qset = 0x7ffff6fc00e0 <JavaThread::_satb_mark_queue_set>,
+      _active = false,
+      _buf = 0x0,
+      _index = 0,
+      _sz = 17433981653976478193,
+      _perm = false,
+      _lock = 0x0
+    }, <No data fields>},
+  static _satb_mark_queue_set = {
+    <PtrQueueSet> = {
+      _vptr.PtrQueueSet = 0x7ffff6f15090 <vtable for SATBMarkQueueSet+16>,
+      _cbl_mon = 0x0,
+      _completed_buffers_head = 0x0,
+      _completed_buffers_tail = 0x0,
+      _n_completed_buffers = 0,
+      _process_completed_threshold = 0,
+
+      _process_completed = false,
+      _fl_lock = 0x0,
+      _buf_free_list = 0x0,
+      _buf_free_list_sz = 0,
+      _fl_owner = 0x7ffff6fc00e0 <JavaThread::_satb_mark_queue_set>,
+      _sz = 0,
+      _all_active = false,
+      _notify_when_complete = false,
+      _max_completed_queue = 0,
+      _completed_queue_padding = 0
+    },
+    members of SATBMarkQueueSet:
+    _closure = 0x0,
+    _par_closures = 0x0,
+    _shared_satb_queue = {
+      <PtrQueue> = {
+        _vptr.PtrQueue = 0x7ffff6f15070 <vtable for ObjPtrQueue+16>,
+        _qset = 0x7ffff6fc00e0 <JavaThread::_satb_mark_queue_set>,
+        _active = false,
+        _buf = 0x0,
+        _index = 0,
+        _sz = 0,
+        _perm = true,
+        _lock = 0x0
+      }, <No data fields>}
+  },
+  _dirty_card_queue = {
+    <PtrQueue> = {
+      _vptr.PtrQueue = 0x7ffff6f01430 <vtable for DirtyCardQueue+16>,
+      _qset = 0x7ffff6fc01a0 <JavaThread::_dirty_card_queue_set>,
+      _active = true,
+      _buf = 0x0,
+      _index = 0,
+      _sz = 17433981653976478193,
+      _perm = false,
+      _lock = 0x0
+    }, <No data fields>},
+  static _dirty_card_queue_set = {
+    <PtrQueueSet> = {
+      _vptr.PtrQueueSet = 0x7ffff6f01410 <vtable for DirtyCardQueueSet+16>,
+      _cbl_mon = 0x0,
+      _completed_buffers_head = 0x0,
+
+      _completed_buffers_tail = 0x0,
+      _n_completed_buffers = 0,
+      _process_completed_threshold = 0,
+      _process_completed = false,
+      _fl_lock = 0x0,
+      _buf_free_list = 0x0,
+      _buf_free_list_sz = 0,
+      _fl_owner = 0x7ffff6fc01a0 <JavaThread::_dirty_card_queue_set>,
+      _sz = 0,
+      _all_active = true,
+      _notify_when_complete = true,
+      _max_completed_queue = 0,
+      _completed_queue_padding = 0
+    },
+    members of DirtyCardQueueSet:
+    _closure = 0x0,
+    _shared_dirty_card_queue = {
+      <PtrQueue> = {
+        _vptr.PtrQueue = 0x7ffff6f01430 <vtable for DirtyCardQueue+16>,
+        _qset = 0x7ffff6fc01a0 <JavaThread::_dirty_card_queue_set>,
+        _active = true,
+        _buf = 0x0,
+        _index = 0,
+        _sz = 0,
+        _perm = true,
+        _lock = 0x0
+      }, <No data fields>},
+    _free_ids = 0x0,
+    _processed_buffers_mut = 0,
+    _processed_buffers_rs_thread = 0
+  },
+  _recorder = 0x0,
+  _thread_profiler = 0x0,
+  _safepoint_visible = true,
+  _privileged_stack_top = 0x0,
+  _array_for_gc = 0x0,
+  _popframe_preserved_args = 0x0,
+  _popframe_preserved_args_size = 0,
+  _jvmti_thread_state = 0x0,
+  _jvmti_get_loaded_classes_closure = 0x0,
+  _interp_only_mode = 0,
+  _should_post_on_exceptions_flag = 0,
+
+  _thread_stat = 0x7ffff000c088,
+  static _stack_size_at_create = 1048576,
+  _blocked_on_compilation = false,
+  _parker = 0x7ffff000c1d8,
+  _cached_monitor_info = 0x0,
+  _claimed_par_id = -1
+}
+
+(gdb) p/x thread->vm_result_2_offset()
+$2 = {_size = 0x258}
+(gdb) p/x thread->vm_result_offset()
+$3 = {_size = 0x250}
+(gdb) p/x thread->last_Java_sp_offset()
+$4 = {_size = 0x1f0}
+(gdb) p/x thread->last_Java_pc_offset()
+$5 = {_size = 0x1f8}
+(gdb) p/x thread->pending_exception_offset()
+$8 = {_size = 0x8}
+(gdb) p/x thread->allocated_bytes_offset()
+$9 = {_size = 0xd0}
+gdb) p/x thread->tlab_start_offset()
+$15 = {_size = 0x68}
+(gdb) p/x thread->tlab_end_offset()
+$16 = {_size = 0x80}
+(gdb) p/x thread->tlab_top_offset()
+$17 = {_size = 0x70}
+(gdb) p/x thread->do_not_unlock_if_synchronized_offset()
+$20 = {_size = 0x2ad}
+(gdb) p/x thread->exception_oop_offset()
+$21 = {_size = 0x2b8}
+
+{
+  <Klass> = {
+    <Metadata> = {
+      <MetaspaceObj> = {<No data fields>},
+      members of Metadata:
+      _vptr.Metadata = 0x7ffff6f08590 <vtable for InstanceKlass+16>,
+      _valid = 0
+    },
+    members of Klass:
+    _layout_helper = 32,
+    _super_check_offset = 72,
+    _name = 0x7fffded1f208,
+    _secondary_super_cache = 0x0,
+    _secondary_supers = 0x7fffded98fc8,
+    _primary_supers = {0x7c0000f30, 0x7c0002870, 0x7c0003008, 0x7c0003290, 0x0, 0x0, 0x0, 0x0},
+    _java_mirror = 0x76e0bec30,
+    _super = 0x7c0003008,
+    _subklass = 0x7c002bf10,
+    _next_sibling = 0x0,
+    _next_link = 0x7c0003008,
+    _class_loader_data = 0x7ffff00363c8,
+    _modifier_flags = 1,
+    _access_flags = {
+      _flags = 2097185
+    },
+    _last_biased_lock_bulk_revocation_time = 0,
+    _prototype_header = 0x5,
+    _biased_lock_revocation_count = 0,
+    _modified_oops = 1 '\001',
+    _accumulated_modified_oops = 0 '\000'
+  },
+  members of InstanceKlass:
+  static _total_instanceKlass_count = 409,
+  _annotations = 0x0,
+  _array_klasses = 0x0,
+  _constants = 0x7fffded9ba28,
+  _inner_classes = 0x7fffded79060,
+  _source_debug_extension = 0x0,
+  _array_name = 0x0,
+  _nonstatic_field_size = 5,
+  _static_field_size = 1,
+  _generic_signature_index = 0,
+  _source_file_name_index = 32,
+  _static_oop_field_count = 0,
+  _java_fields_count = 1,
+  _nonstatic_oop_map_size = 1,
+  _is_marked_dependent = false,
+  _misc_flags = 3,
+  _minor_version = 0,
+  _major_version = 52,
+  _init_thread = 0x7ffff000a800,
+  _vtable_len = 23,
+  _itable_len = 2,
+  _oop_map_cache = 0x0,
+  _member_names = 0x0,
+  _jni_ids = 0x0,
+  _methods_jmethod_ids = 0x0,
+  _dependencies = 0x0,
+  _osr_nmethods_head = 0x0,
+  _breakpoints = 0x0,
+  _previous_versions = 0x0,
+  _cached_class_file = 0x0,
+  _idnum_allocated_count = 5,
+  _init_state = 4 '\004',
+  _reference_type = 0 '\000',
+  _jvmti_cached_class_field_map = 0x0,
+  _verify_count = 0,
+  _methods = 0x7fffded9bbd8,
+  _default_methods = 0x0,
+  _local_interfaces = 0x7fffded79090,
+  _transitive_interfaces = 0x7fffded98fc8,
+  _method_ordering = 0x7fffded79048,
+  _default_vtable_indices = 0x0,
+  _fields = 0x7fffded9bbc0
+}
+
+(gdb) p/x Universe::narrow_klass_base() -> 0
+(gdb) p/x Universe::narrow_klass_shift() -> 3
+(gdb) p/x Universe::narrow_oop_base() -> 0
+(gdb) p/x Universe::narrow_oop_shift() -> 3
+
+p/x klass->java_mirror_offset()
+$8 = {_size = 0x70}
+ p/x klass->prototype_header_offset()
+$9 = {_size = 0xb0}
