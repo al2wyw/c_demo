@@ -60,14 +60,16 @@ SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpre
                                                     => (comp) StubRoutines::_catch_exception_entry for _call_stub_return_address
 
 
-安全点机制
-解析执行进入安全点: Interpreter::notice_safepoints() => copy_table(&_safept_table, &_active_table) ====> InterpreterRuntime::at_safepoint 后续是jvmti的逻辑(JvmtiExport::post_single_step把线程加入到待暂停的列表中，最终会调用JvmtiEnv::SuspendThread函数)
-编译执行进入安全点: os::make_polling_page_unreadable() => linux_mprotect(addr, size, PROT_NONE) ====> JVM_handle_linux_signal => SharedRuntime::get_poll_stub => SharedRuntime::polling_page_return_handler_blob()->entry_point()
-native执行进入安全点: native方法执行完毕后检查是否要进入安全点 => transition_from_native => JavaThread::check_safepoint_and_suspend_for_native_trans()
-
-获取对象锁、park、sleep被blocked的线程会判断安全点吗？ 会的，io rw不会
-在进入block时: ThreadBlockInVM() -> transition_and_fence 通过 SafepointSynchronize::do_call_back 的判断会调用 SafepointSynchronize::block
-在离开block时: ~ThreadBlockInVM() -> transition_and_fence
+安全点机制(5种场景)
+1. 解析执行进入安全点: Interpreter::notice_safepoints() => copy_table(&_safept_table, &_active_table) ====> InterpreterRuntime::at_safepoint 后续是jvmti的逻辑(JvmtiExport::post_single_step把线程加入到待暂停的列表中，最终会调用JvmtiEnv::SuspendThread函数)
+2. 编译执行进入安全点: os::make_polling_page_unreadable() => linux_mprotect(addr, size, PROT_NONE) ====> JVM_handle_linux_signal => SharedRuntime::get_poll_stub => SharedRuntime::polling_page_return_handler_blob()->entry_point()
+3. native执行进入安全点: native方法执行完毕后检查是否要进入安全点 => transition_from_native => JavaThread::check_safepoint_and_suspend_for_native_trans()
+4. blocked的线程: 获取对象锁、park、sleep被blocked的线程会判断安全点吗？ 会的，io rw不会:
+4.1. 在进入block时: ThreadBlockInVM() -> transition_and_fence 通过 SafepointSynchronize::do_call_back 的判断会调用 SafepointSynchronize::block
+4.2. 在离开block时: ~ThreadBlockInVM() -> transition_and_fence
+5. In VM or Transitioning between states: the thread will block itself when it attempts transitions to a new state
+5.1. IRT_ENTRY => ThreadInVMfromJava => transition
+5.2. JVM_ENTRY => ThreadInVMfromNative => transition_and_fence
 
 deopt的过程
 触发点: class加载导致class hierarchy改变；redefine class；uncommon trap exception；...

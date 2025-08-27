@@ -340,7 +340,7 @@ bytecode name就是字节码名称；
 wide表示字节码前面是否可以加wild，如果可以，则值为"wbii"；
 result tp表示指令执行后的结果类型，如为T_ILLEGAL时，表示只参考当前字节码无法决定执行结果的类型，如_invokevirtual方法调用指令，结果类型应该为方法返回类型，但是此时只参数这个调用方法的字节码指令是无法决定的；
 stk表示对表达式栈深度的影响，如_nop指令不执行任何操作，所以对表达式栈的深度无影响，stk的值为0；当用_iconst_0向栈中压入0时，栈的深度增加1，所以stk的值为1。当为_lconst_0时，栈的深度会增加2；当为_lstore_0时，栈的深度会减少2；
-traps表示can_trap，这个比较重要，在后面会详细介绍； ???
+traps表示can_trap，表示是否会触发异常
 format，这个属性能表达2个意思，首先能表达字节码的格式，另外还能表示字节码的长度。
 format详解:
 b：表示字节码指令是非可变长度的，所以对于tableswitch、lookupswitch这种可变长度的指令来说，format字符串中不会含有b字符 
@@ -1503,13 +1503,34 @@ struct JavaVM_ {
     ...
 }
 
-跳过，代码分析比较浅显
 第41篇-JNIEnv与JavaVM的初始化
+JavaMain() java.c
+InitializeJVM() java.c
+JNI_CreateJavaVM() jni.cpp
+Threads::create_vm() thread.cpp
+JavaThread::JavaThread() thread.cpp
+JavaThread::initialize() thread.cpp
+jni_functions() jni.cpp
 
-未读跳过，暂时涉及不到
 第42篇-JNI引用的管理（1）
-第43篇-JNI引用的管理（2）
+可以通过JNI创建新的 Java 对象: 同时需要通过JNI 的局部引用（Local Reference）和全局引用（Global Reference）来保证不让GC回收这些对象。无论是局部引用还是全局引用，其实都是通过句柄进行引用JNIHandles
+JVM内部也有使用句柄: Handle(oop* _handle)、HandleMark、HandleArea与Chunk这几个类的用法，它是为解决JVM内部的代码引用情况。当发生垃圾回收时，如果 Java 对象被移动了，那么句柄指向的指针值也将发生变动，但句柄本身保持不变。
 
+局部引用所对应的句柄有两种存储方式:
+一是在本地方法栈帧中，主要用于存放 C++ 函数所接收的来自 Java 层面的引用类型参数
+另一种则是线程私有的句柄块JNIHandleBlock(oop _handles[32])，主要用于存放本地函数运行过程中创建的局部引用
+全局引用放在HotSpot VM全局的JNIHandleBlock里
+
+在调用JAVA方法前会创建JavaCallWrapper并保存在CallStub的栈中(call wrapper)，JavaCallWrapper可以用来管理JNIHandleBlock:
+之前的C++栈帧通过JavaCallWrapper::_handles找到之前使用的JNIHandleBlock单链表(可以遍历C++栈帧中引用的堆中对象了)
+在当前正在执行的C++栈帧中，则通过Thread::_active_handles就能找到当前使用的JNIHandleBlock单链表
+
+JNIHandleBlock的结构，JNIHandleBlock::allocate_block()和JNIHandleBlock::release_block()
+
+第43篇-JNI引用的管理（2）
+因为JNIHandle没有JNIHandleMark的机制，所以在创建时需要明确调用JNIHandles::make_local()函数，在回收时也需要明确调用JNIHandles::destory_local()函数
+局部引用: JNIHandles::make_local() -> JNIHandleBlock::allocate_handle()
+全局引用: JNIHandles::make_global() -> JNIHandleBlock::allocate_handle()
 
 第44篇-为native方法生成解释执行入口
 在HotSpot VM中，Java方法调用native方法会有2个入口例程，一个为解释执行的入口例程，一个为“编译”执行的入口例程。
