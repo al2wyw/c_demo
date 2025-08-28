@@ -1353,7 +1353,7 @@ BasicObjectLock中有2个属性，_lock(-0x50(%rbp))和_obj(-0x48(%rbp))，分�
 // 让BasicObjectLock::_obj的那个oop的mark恢复为
 // BasicObjectLock::_lock中保存的原对象头
 0x00007fffe101b8d8: lock cmpxchg %rdx,(%rcx)
-// 如果为0，则表示锁的重入，跳转到---- done ---- ????
+// 如果为0，则表示锁的重入，跳转到---- done ----
 0x00007fffe101b8dd: je 0x00007fffe101b96c
 
 // 让BasicObjectLock::_obj指向oop，这个oop的对象头已经替换为了BasicObjectLock::_lock中保存的对象头

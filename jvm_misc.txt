@@ -167,7 +167,7 @@ NewObject()函数的调用由于涉及到了Java对象，所以这个线程在�
 
 本地方法栈帧中的堆对象引用在gc后是不是变为null? 是的，所以不要直接引用堆对象，而是通过JNIEnv的方法来获取堆对象的引用
 JNIHandles::make_local还没有调用前就gc了堆对象引用是不是变为null? 是的，所以要用JNI_ENTRY保证JNIHandles::make_local被调用时不会有gc
-jvm内部的Handle可以防止gc回收堆对象吗? 有必要使用Handle吗? 不防止gc，但保证gc后引用的地址不丢失。虽然state_in_vm不会发生gc，但是state_in_vm有可能通过invoke调用java方法从而导致gc
+jvm内部的Handle可以防止gc回收堆对象吗? 有必要使用Handle吗? 会防止gc(HandleArea::oops_do)，同时保证gc后引用的地址不丢失。虽然state_in_vm期间不会发生gc，但是在state_in_vm的上下文中有可能调用java方法(进入state_in_java)而导致gc
 
 
 Java和C++语言性能大比拼:
