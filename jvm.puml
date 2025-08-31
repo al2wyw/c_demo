@@ -40,7 +40,7 @@ end note
 
 CompilerThread --|> JavaThread
 
-JavaThread ...> OSThread
+Thread ...> OSThread
 
 ResourceObj --|> AllocatedObj
 StackObj --|> AllocatedObj
