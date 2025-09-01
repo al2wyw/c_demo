@@ -153,8 +153,8 @@ allow_shared_alloc -> allocate on Edan via cmpxchg
 slow_case -> InterpreterRuntime::_new -> InstanceKlass::allocate_instance
 
 YGC: Generation is DefNewGeneration
-GenCollectedHeap::do_collection -> Generation::collect -> GenCollectedHeap::gen_process_roots(根直接引用)-> GenCollectedHeap::process_roots(年轻代)
-                                                                                                       -> CardTableRS::younger_refs_iterate(年老代)
+GenCollectedHeap::do_collection -> Generation::collect -> GenCollectedHeap::gen_process_roots(根直接引用)-> GenCollectedHeap::process_roots(年轻代) -> FastScanClosure::do_oop_work
+                                                                                                       -> CardTableRS::younger_refs_iterate(年老代到年轻代的引用) -> FastScanClosure::do_oop_work
                                                        -> FastEvacuateFollowersClosure::do_void(根间接引用)
 
 FastScanClosure(with barrier or with no barrier)::do_oop_work 用于ygc复制操作(会判断oop是否在年轻代)，对象头有转发指针，同时写屏障标记年老代卡页是否为脏
@@ -177,12 +177,20 @@ CardTableRS::younger_refs_iterate: (年老代主要是从脏卡里的oop的引�
 Filtering_DCTOC::walk_mem_region
 ContiguousSpaceDCTOC::walk_mem_region_with_cl
 oopDesc::oop_iterate
-InstanceKlass::oop_oop_iterate_nv (从InstanceKlass的oop map block快速读取实例所引用的oop)
+InstanceKlass::oop_oop_iterate_nv (从InstanceKlass的oop map block快速读取实例所引用的oop，OopMapBlock记录当前oop引用的obj field offset和field数量，每个oop有多个OopMapBlock是因为每个klass有一个OopMapBlock(类继承导致))
+FastScanClosure::do_oop_work (with barrier)
 
 FastEvacuateFollowersClosure::do_void: (年轻代直接从to space开始遍历，跳过eden和from区; 年老代主要是遍历刚刚晋升过来的新oop)
+年轻代:
 ContiguousSpace::oop_since_save_marks_iterate_nv
-oopDesc::oop_iterate
-InstanceKlass::oop_oop_iterate_nv
+    oopDesc::oop_iterate
+    InstanceKlass::oop_oop_iterate_nv
+    FastScanClosure::do_oop_work (with no barrier)
+年老代:
+ContiguousSpace::oop_since_save_marks_iterate_nv
+    oopDesc::oop_iterate
+    InstanceKlass::oop_oop_iterate_nv
+    FastScanClosure::do_oop_work (with barrier)
 
 FGC: Generation is TenuredGeneration plus(maybe) DefNewGeneration
 GenCollectedHeap::do_full_collection -> GenCollectedHeap::do_collection -> Generation::collect -> GenMarkSweep::invoke_at_safepoint -> GenMarkSweep::mark_sweep_phase1 标记所有活跃对象 GenCollectedHeap::gen_process_roots -> FollowRootClosure
@@ -211,19 +219,27 @@ GenCompactClosure::do_generation 拷贝旧oop数据到转发地址对应的新�
 Generation::compact
 CompactibleSpace::compact
 
-CMS:
-CMSCollector::collect_in_background:
+CMS: CMSCollector::collect_in_background:
 
-CMSCollector::checkpointRootsInitialWork
+1. CMSCollector::checkpointRootsInitialWork:
+GenCollectedHeap::gen_process_roots(根直接引用) -> GenCollectedHeap::process_roots(年老代) -> MarkRefsIntoClosure::do_oop
+                                              -> Generation::oop_iterate(年轻代到年老代的引用，可以在idea里面直接查看宏展开) -> oopDesc::oop_iterate -> InstanceKlass::oop_oop_iterate_nv -> MarkRefsIntoClosure::do_oop
 
-CMSCollector::markFromRoots
 
-CMSCollector::preclean
+MarkRefsIntoClosure::do_oop() -> 判断oop地址是否在mem region然后更新cms bitmap,cms bitmap拥有所有的根直接引用
 
-CMSCollector::abortable_preclean
+2. CMSCollector::markFromRoots: 从cms bitmap出发标记所有的根间接引用
+MarkFromRootsClosure::do_bit(cms bitmap) -> MarkFromRootsClosure::scanOopsInOop(使用_markStack递归全量标记) -> oopDesc::oop_iterate -> InstanceKlass::oop_oop_iterate_nv -> PushOrMarkClosure::do_oop(更新cms bitmap)
 
-CMSCollector::checkpointRootsFinal
+3. CMSCollector::preclean: 主要处理两种场景(被引用的对象晋升或直接分配到年老代，被标记的年老代对象引用关系变化)，配合dirty card机制以减少final mark的时间
 
-CMSCollector::sweep
+
+4. CMSCollector::abortable_preclean
+
+5. CMSCollector::checkpointRootsFinal: 太复杂
+CMSCollector::do_remark_non_parallel
+CMSCollector::do_remark_parallel
+
+6. CMSCollector::sweep
 
 G1:
