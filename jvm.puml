@@ -58,14 +58,17 @@ ResourceArea --|> Arena
 Chunk --|> CHeapObj
 Metaspace --|> CHeapObj
 CollectedHeap --|> CHeapObj
+ParallelScavengeHeap --|> CollectedHeap
 SharedHeap --|> CollectedHeap
 GenCollectedHeap --|> SharedHeap
 G1CollectedHeap --|> SharedHeap
 Generation --|> CHeapObj
 CardGeneration --|> Generation
-TenuredGeneration --|> CardGeneration
+TenuredGeneration --|> OneContigSpaceCardGeneration
 ConcurrentMarkSweepGeneration --|> CardGeneration
+OneContigSpaceCardGeneration --|> CardGeneration
 DefNewGeneration --|> Generation
+ParNewGeneration --|> DefNewGeneration
 
 Space --|> CHeapObj
 CompactibleSpace --|> Space
@@ -76,6 +79,9 @@ CompactibleSpace --|> Space
             TenuredSpace --|> OffsetTableContigSpace
     G1OffsetTableContigSpace --|> CompactibleSpace
         HeapRegion --|> G1OffsetTableContigSpace
+
+CollectedHeap ...> Generation
+Generation ...> Space
 
 Parker ..|> PlatformParker
 ParkEvent ..|> PlatformEvent
