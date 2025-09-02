@@ -232,14 +232,18 @@ MarkRefsIntoClosure::do_oop() -> 判断oop地址是否在mem region然后更新c
 MarkFromRootsClosure::do_bit(cms bitmap) -> MarkFromRootsClosure::scanOopsInOop(使用_markStack递归全量标记) -> oopDesc::oop_iterate -> InstanceKlass::oop_oop_iterate_nv -> PushOrMarkClosure::do_oop(更新cms bitmap)
 
 3. CMSCollector::preclean: 主要处理两种场景(被引用的对象晋升或直接分配到年老代，被标记的年老代对象引用关系变化)，配合dirty card机制以减少final mark的时间
+clean_refs
+preclean_klasses
+preclean_card_table ->
+
+4. CMSCollector::abortable_preclean:
 
 
-4. CMSCollector::abortable_preclean
-
-5. CMSCollector::checkpointRootsFinal: 太复杂
+5. CMSCollector::checkpointRootsFinal:
 CMSCollector::do_remark_non_parallel
 CMSCollector::do_remark_parallel
 
-6. CMSCollector::sweep
+6. CMSCollector::sweep:
+CompactibleFreeListSpace::blk_iterate_careful -> SweepClosure::do_blk_careful
 
 G1:

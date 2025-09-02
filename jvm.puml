@@ -68,10 +68,14 @@ ConcurrentMarkSweepGeneration --|> CardGeneration
 DefNewGeneration --|> Generation
 
 Space --|> CHeapObj
-ContiguousSpace --|> Space
-EdenSpace --|> ContiguousSpace
-OffsetTableContigSpace --|> ContiguousSpace
-TenuredSpace --|> OffsetTableContigSpace
+CompactibleSpace --|> Space
+    CompactibleFreeListSpace --|> CompactibleSpace
+    ContiguousSpace --|> CompactibleSpace
+        EdenSpace --|> ContiguousSpace
+        OffsetTableContigSpace --|> ContiguousSpace
+            TenuredSpace --|> OffsetTableContigSpace
+    G1OffsetTableContigSpace --|> CompactibleSpace
+        HeapRegion --|> G1OffsetTableContigSpace
 
 Parker ..|> PlatformParker
 ParkEvent ..|> PlatformEvent
