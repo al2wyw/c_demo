@@ -158,6 +158,8 @@ GenCollectedHeap::do_collection -> Generation::collect -> GenCollectedHeap::gen_
                                                        -> FastEvacuateFollowersClosure::do_void(根间接引用)
 
 FastScanClosure(with barrier or with no barrier)::do_oop_work 用于ygc复制操作(会判断oop是否在年轻代)，对象头有转发指针，同时写屏障标记年老代卡页是否为脏
+FastScanClosure::do_oop_work -> DefNewGeneration::copy_to_survivor_space -> to()->allocate_aligned copy到to区
+                                                                         -> _next_gen->promote 晋升到next gen
 
 GenCollectedHeap::process_roots: (年轻代主要是从各个地方扫描出所有的根oop)
 •Universe::oops_do（）：主要是将 Universe:initialize_basic_type_mirrors（）函数中创建基本类型的 mirror 的 instanceOop 实例（表示 java.lang.Class 对象）作为根遍历。
