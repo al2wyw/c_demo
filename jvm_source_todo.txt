@@ -221,6 +221,15 @@ GenCompactClosure::do_generation 拷贝旧oop数据到转发地址对应的新�
 Generation::compact
 CompactibleSpace::compact
 
+CMS free list: FreeList head -> FreeChunk <=> FreeChunk <- tail FreeList
+LinearAllocBlock ???
+AdaptiveFreeList(size < 257) size as index -> chuck list
+BinaryTreeDictionary(size >= 257) size of chuck -> chuck list
+小块的chunk来自于大块chunk的spilt，初始化时整块内存作为一个chunk给了BinaryTreeDictionary
+
+BlockOffsetArrayNonContigSpace 脏卡 block offset table ???
+
+
 CMS: CMSCollector::collect_in_background:
 
 1. CMSCollector::checkpointRootsInitialWork:
