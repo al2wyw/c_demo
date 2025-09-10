@@ -200,12 +200,14 @@ ParScanClosure(with barrier or with no barrier)
 ParScanClosure::do_oop_work -> ParNewGeneration::copy_to_survivor_space -> to_space_alloc_buffer()->allocate_aligned copy到to区的ParGCAllocBuffer(PLAB,线程独占)  -> par_scan_state->work_queue()->push(obj_to_push)
                                                                         or _next_gen->par_promote 晋升到next gen的local allocation buffer(CFLS_LAB,线程独占)       or ParNewGeneration::push_on_overflow_list()
 ParScanThreadState::alloc_in_to_space_slow ->  Space::par_allocate
-                                               ParGCAllocBuffer::set_buf // PLAB的内存分配
+                                               ParGCAllocBuffer::set_buf // PLAB的内存分配，从Space线性分配
 
-ParEvacuateFollowersClosure::do_void(根间接引用)
-ParScanThreadState::trim_queues //Scan to-space and old-gen objs
-task_queues()->steal //steal from other thread
-ParNewGeneration::take_from_overflow_list //steal from global overflow list
+                                               CFLS_LAB::  ... // CFLS_LAB的内存分配
+
+ParEvacuateFollowersClosure::do_void(根间接引用,实现方式不同)
+ParScanThreadState::trim_queues(0) //Scan to-space and old-gen objs -> ParScanClosure::do_oop_work
+task_queues()->steal //steal from other thread, go back to trim_queues
+ParNewGeneration::take_from_overflow_list //steal from global overflow list, go back to trim_queues
 task_queue 就是 work_queue，ParNewGeneration::collect 有初始化逻辑
 
 FGC: Generation is TenuredGeneration plus(maybe) DefNewGeneration
