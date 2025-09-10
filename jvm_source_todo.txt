@@ -159,7 +159,7 @@ GenCollectedHeap::do_collection -> Generation::collect -> GenCollectedHeap::gen_
 
 FastScanClosure(with barrier or with no barrier)::do_oop_work 用于ygc复制操作(会判断oop是否在年轻代)，对象头有转发指针，同时写屏障标记年老代卡页是否为脏
 FastScanClosure::do_oop_work -> DefNewGeneration::copy_to_survivor_space -> to()->allocate_aligned copy到to区
-                                                                         -> _next_gen->promote 晋升到next gen
+                                                                         or _next_gen->promote 晋升到next gen
 
 GenCollectedHeap::process_roots: (年轻代主要是从各个地方扫描出所有的根oop)
 •Universe::oops_do（）：主要是将 Universe:initialize_basic_type_mirrors（）函数中创建基本类型的 mirror 的 instanceOop 实例（表示 java.lang.Class 对象）作为根遍历。
@@ -194,6 +194,20 @@ ContiguousSpace::oop_since_save_marks_iterate_nv
     InstanceKlass::oop_oop_iterate_nv
     FastScanClosure::do_oop_work (with barrier)
 
+YGC: Generation is ParNewGeneration (其他与DefNewGeneration保持一致)
+ParNewGenTask::work 任务起始，多个GangWorker(WorkerThread)通过ParScanThreadState的work_queue协作进行垃圾回收, 通过GenCollectedHeap::process_roots的is_task_claimed协作进行root扫描任务
+ParScanClosure(with barrier or with no barrier)
+ParScanClosure::do_oop_work -> ParNewGeneration::copy_to_survivor_space -> to_space_alloc_buffer()->allocate_aligned copy到to区的ParGCAllocBuffer(PLAB,线程独占)  -> par_scan_state->work_queue()->push(obj_to_push)
+                                                                        or _next_gen->par_promote 晋升到next gen的local allocation buffer(CFLS_LAB,线程独占)       or ParNewGeneration::push_on_overflow_list()
+ParScanThreadState::alloc_in_to_space_slow ->  Space::par_allocate
+                                               ParGCAllocBuffer::set_buf // PLAB的内存分配
+
+ParEvacuateFollowersClosure::do_void(根间接引用)
+ParScanThreadState::trim_queues //Scan to-space and old-gen objs
+task_queues()->steal //steal from other thread
+ParNewGeneration::take_from_overflow_list //steal from global overflow list
+task_queue 就是 work_queue，ParNewGeneration::collect 有初始化逻辑
+
 FGC: Generation is TenuredGeneration plus(maybe) DefNewGeneration
 GenCollectedHeap::do_full_collection -> GenCollectedHeap::do_collection -> Generation::collect -> GenMarkSweep::invoke_at_safepoint -> GenMarkSweep::mark_sweep_phase1 标记所有活跃对象 GenCollectedHeap::gen_process_roots -> FollowRootClosure
                                                                                                                                     -> GenMarkSweep::mark_sweep_phase2 计算所有活跃对象在压缩后的偏移地址 Generation::prepare_for_compaction -> ContiguousSpace::prepare_for_compaction (主要是计算出所有的LiveRange)
@@ -221,6 +235,10 @@ GenCompactClosure::do_generation 拷贝旧oop数据到转发地址对应的新�
 Generation::compact
 CompactibleSpace::compact
 
+
+ParallelScavenge: (和以上完全不一样的另一套实现方式)
+
+CMS:
 CMS free list: FreeList head -> FreeChunk <=> FreeChunk <- tail FreeList
 LinearAllocBlock ???
 AdaptiveFreeList(size < 257) size as index -> chuck list
@@ -230,7 +248,7 @@ BinaryTreeDictionary(size >= 257) size of chuck -> chuck list
 BlockOffsetArrayNonContigSpace 脏卡 block offset table ???
 
 
-CMS: CMSCollector::collect_in_background:
+CMSCollector::collect_in_background:
 
 1. CMSCollector::checkpointRootsInitialWork:
 GenCollectedHeap::gen_process_roots(根直接引用) -> GenCollectedHeap::process_roots(年老代) -> MarkRefsIntoClosure::do_oop
