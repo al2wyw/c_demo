@@ -140,7 +140,7 @@ if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额�
 全局内存初始化
 ReservedSpace to reserve virtual address in advance:
 universe_init -> Universe::initialize_heap -> GenCollectedHeap::initialize -> GenCollectedHeap::allocate -> Universe::reserve_heap(return ReservedSpace)
-ReservedSpace::initialize(large is false) -> os::reserve_memory -> mmap(PROT_NONE)
+ReservedSpace::initialize(large is false, large page memory大页内存) -> os::reserve_memory -> mmap(PROT_NONE)
 VirtualSpace holds ReservedSpace to perform commit and pre-touch:
 DefNewGeneration::compute_new_size -> DefNewGeneration::expand -> VirtualSpace::expand_by -> os::commit_memory -> mmap(PROT_READ|PROT_WRITE)
 
@@ -158,8 +158,7 @@ GenCollectedHeap::do_collection -> Generation::collect -> GenCollectedHeap::gen_
                                                        -> FastEvacuateFollowersClosure::do_void(根间接引用)
 
 FastScanClosure(with barrier or with no barrier)::do_oop_work 用于ygc复制操作(会判断oop是否在年轻代)，对象头有转发指针，同时写屏障标记年老代卡页是否为脏
-FastScanClosure::do_oop_work -> DefNewGeneration::copy_to_survivor_space -> to()->allocate_aligned copy到to区
-                                                                         or _next_gen->promote 晋升到next gen
+FastScanClosure::do_oop_work -> DefNewGeneration::copy_to_survivor_space -> to()->allocate_aligned copy到to区 or _next_gen->promote 晋升到next gen
 
 GenCollectedHeap::process_roots: (年轻代主要是从各个地方扫描出所有的根oop)
 •Universe::oops_do（）：主要是将 Universe:initialize_basic_type_mirrors（）函数中创建基本类型的 mirror 的 instanceOop 实例（表示 java.lang.Class 对象）作为根遍历。
@@ -178,7 +177,7 @@ GenCollectedHeap::process_roots: (年轻代主要是从各个地方扫描出所�
 CardTableRS::younger_refs_iterate: (年老代主要是从脏卡里的oop的引用中扫描出根oop)
 Filtering_DCTOC::walk_mem_region
 ContiguousSpaceDCTOC::walk_mem_region_with_cl
-oopDesc::oop_iterate
+oopDesc::oop_iterate (返回oop size)
 InstanceKlass::oop_oop_iterate_nv (从InstanceKlass的oop map block快速读取实例所引用的oop，OopMapBlock记录当前oop引用的obj field offset和field数量，每个oop有多个OopMapBlock是因为每个klass有一个OopMapBlock(类继承导致))
 FastScanClosure::do_oop_work (with barrier)
 
@@ -187,7 +186,7 @@ FastEvacuateFollowersClosure::do_void: (年轻代直接从to space开始遍历�
 ContiguousSpace::oop_since_save_marks_iterate_nv
     oopDesc::oop_iterate
     InstanceKlass::oop_oop_iterate_nv
-    FastScanClosure::do_oop_work (with no barrier)
+    FastScanClosure::do_oop_work (with no barrier) (如果复制到to区，to区的top会变大)
 年老代:
 ContiguousSpace::oop_since_save_marks_iterate_nv
     oopDesc::oop_iterate
@@ -197,12 +196,12 @@ ContiguousSpace::oop_since_save_marks_iterate_nv
 YGC: Generation is ParNewGeneration (其他与DefNewGeneration保持一致)
 ParNewGenTask::work 任务起始，多个GangWorker(WorkerThread)通过ParScanThreadState的work_queue协作进行垃圾回收, 通过GenCollectedHeap::process_roots的is_task_claimed协作进行root扫描任务
 ParScanClosure(with barrier or with no barrier)
-ParScanClosure::do_oop_work -> ParNewGeneration::copy_to_survivor_space -> to_space_alloc_buffer()->allocate_aligned copy到to区的ParGCAllocBuffer(PLAB,线程独占)  -> par_scan_state->work_queue()->push(obj_to_push)
-                                                                        or _next_gen->par_promote 晋升到next gen的local allocation buffer(CFLS_LAB,线程独占)       or ParNewGeneration::push_on_overflow_list()
+ParScanClosure::do_oop_work -> ParNewGeneration::copy_to_survivor_space -> to_space_alloc_buffer()->allocate_aligned copy到to区的ParGCAllocBuffer(PLAB,线程独占) or _next_gen->par_promote 晋升到next gen的local allocation buffer(CFLS_LAB,线程独占)
+                                                                        -> par_scan_state->work_queue()->push(obj_to_push) or ParNewGeneration::push_on_overflow_list()
 ParScanThreadState::alloc_in_to_space_slow ->  Space::par_allocate
                                                ParGCAllocBuffer::set_buf // PLAB的内存分配，从Space线性分配
 
-                                               CFLS_LAB::  ... // CFLS_LAB的内存分配
+                                               CFLS_LAB::  ??? // CFLS_LAB的内存分配
 
 ParEvacuateFollowersClosure::do_void(根间接引用,实现方式不同)
 ParScanThreadState::trim_queues(0) //Scan to-space and old-gen objs -> ParScanClosure::do_oop_work
@@ -243,8 +242,8 @@ ParallelScavenge: (和以上完全不一样的另一套实现方式)
 CMS:
 CMS free list: FreeList head -> FreeChunk <=> FreeChunk <- tail FreeList
 LinearAllocBlock ???
-AdaptiveFreeList(size < 257) size as index -> chuck list
-BinaryTreeDictionary(size >= 257) size of chuck -> chuck list
+AdaptiveFreeList(size < 257) size as index -> free chuck list
+BinaryTreeDictionary(size >= 257) size as key -> free chuck list
 小块的chunk来自于大块chunk的spilt，初始化时整块内存作为一个chunk给了BinaryTreeDictionary
 
 BlockOffsetArrayNonContigSpace 脏卡 block offset table ???
@@ -278,3 +277,29 @@ CMSCollector::do_remark_parallel
 CompactibleFreeListSpace::blk_iterate_careful -> SweepClosure::do_blk_careful
 
 G1:
+YGC:
+G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_collection_set -> G1ParTask::work -> G1RootProcessor::evacuate_roots -> is_task_claimed -> G1ParCopyClosure::do_oop_work
+                                                                                                                 -> G1RootProcessor::scan_remembered_sets -> G1RemSet::oops_into_collection_set_do -> G1RemSet::updateRS -> G1CollectedHeap::iterate_dirty_card_closure -> RefineRecordRefsIntoCSCardTableEntryClosure::do_card_ptr
+                                                                                                                                                                                                   -> G1RemSet::scanRS -> ???
+                                                                                                                 -> G1ParEvacuateFollowersClosure::do_void -> G1ParScanThreadState::steal_and_trim_queue -> G1ParScanThreadState::do_oop_evac (same as G1ParCopyClosure::do_oop_work)
+                                                  -> G1CollectedHeap::free_collection_set -> ???
+
+G1ParCopyClosure(with barrier or with no barrier)::do_oop_work -> G1ParScanThreadState::copy_to_survivor_space -> G1ParGCAllocator::plab_allocate copy到survivor region的G1ParGCAllocBuffer(PLAB,线程独占) or copy到old region的PLAB
+                                                                                                               -> G1ParScanThreadState::push_on_queue
+
+MIX GC: (including G1CollectedHeap::do_collection_pause_at_safepoint, should_start_conc_mark is true)
+ConcurrentMarkThread::run -> ConcurrentMark::scanRootRegions -> CMRootRegionScanTask::work -> ConcurrentMark::scanRootRegion -> G1RootRegionScanClosure::do_oop
+                          -> ConcurrentMark::markFromRoots() -> CMConcurrentMarkingTask::work -> CMTask::do_marking_step
+                          -> CMCheckpointRootsFinalClosure(VM_CGC_Operation) -> ConcurrentMark::checkpointRootsFinal -> CMTask::do_marking_step
+                          -> CMCleanUp(VM_CGC_Operation) -> ConcurrentMark::cleanup()
+copy step (stw)???
+
+G1RootRegionScanClosure::do_oop
+
+CMTask::do_marking_step
+
+FGC:
+G1CollectedHeap::do_full_collection ->
+
+string去重: +XX:UseStringDeduplication
+G1StringDedup::enqueue_from_mark
