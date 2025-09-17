@@ -11,8 +11,9 @@ nonstatic_oop_map
 宿主类(host_klass,匿名类专属)
 
 java.lang.Class类 -> InstanceMirrorKlass
-java.lang.Class对象 ->    oop
-                          | mirror
+java.lang.Class对象 ->    oop (含static fields)
+                          ^
+                          | java mirror
 java.lang.Object类 -> InstanceKlass
 
 2.2 oop

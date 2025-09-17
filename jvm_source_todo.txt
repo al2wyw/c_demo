@@ -61,7 +61,7 @@ SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpre
 
 
 安全点机制(5种场景)
-1. 解析执行进入安全点: Interpreter::notice_safepoints() => copy_table(&_safept_table, &_active_table) ====> InterpreterRuntime::at_safepoint 后续是jvmti的逻辑(JvmtiExport::post_single_step把线程加入到待暂停的列表中，最终会调用JvmtiEnv::SuspendThread函数)
+1. 解析执行进入安全点: Interpreter::notice_safepoints() => copy_table(&_safept_table, &_active_table) ====> InterpreterRuntime::at_safepoint => IRT_ENTRY
 2. 编译执行进入安全点: os::make_polling_page_unreadable() => linux_mprotect(addr, size, PROT_NONE) ====> JVM_handle_linux_signal => SharedRuntime::get_poll_stub => SharedRuntime::polling_page_return_handler_blob()->entry_point()
 3. native执行进入安全点: native方法执行完毕后检查是否要进入安全点 => transition_from_native => JavaThread::check_safepoint_and_suspend_for_native_trans()
 4. blocked的线程: 获取对象锁、park、sleep被blocked的线程会判断安全点吗？ 会的，io rw不会:
@@ -145,9 +145,9 @@ VirtualSpace holds ReservedSpace to perform commit and pre-touch:
 DefNewGeneration::compute_new_size -> DefNewGeneration::expand -> VirtualSpace::expand_by -> os::commit_memory -> mmap(PROT_READ|PROT_WRITE)
 
 类初始化内存分配
-ClassFileParser::parseClassFile ->  InstanceKlass::allocate_instance_klass
-                                    java_lang_Class::create_mirror
-对象初始化内存分配
+ClassFileParser::parseClassFile ->  InstanceKlass::allocate_instance_klass (Allocate in meta)
+                                    java_lang_Class::create_mirror (Allocate mirror and initialize static fields in heap)
+对象初始化内存分配 (Allocate in heap)
 UseTLAB -> allocate on TLAB (TLAB is on edan and allocate new TLAB when it is consumed)
 allow_shared_alloc -> allocate on Edan via cmpxchg
 slow_case -> InterpreterRuntime::_new -> InstanceKlass::allocate_instance
