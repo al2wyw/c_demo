@@ -288,6 +288,8 @@ G1ParCopyClosure(with barrier or with no barrier)::do_oop_work -> G1ParScanThrea
                                                                                                                -> G1ParScanThreadState::push_on_queue
 
 MIX GC: (including G1CollectedHeap::do_collection_pause_at_safepoint, should_start_conc_mark is true)
+should_start_conc_mark的触发条件 -> set_initiate_conc_mark_if_possible -> need_to_start_conc_mark -> IHOP
+                                                                      ->  force_initial_mark_if_outside_cycle
 ConcurrentMarkThread::run -> ConcurrentMark::scanRootRegions -> CMRootRegionScanTask::work -> ConcurrentMark::scanRootRegion -> G1RootRegionScanClosure::do_oop
                           -> ConcurrentMark::markFromRoots() -> CMConcurrentMarkingTask::work -> CMTask::do_marking_step
                           -> CMCheckpointRootsFinalClosure(VM_CGC_Operation) -> ConcurrentMark::checkpointRootsFinal -> CMTask::do_marking_step
