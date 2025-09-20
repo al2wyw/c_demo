@@ -1060,7 +1060,7 @@ LinkResolver::resolve_klass()
 ConstantPool::klass_ref_at()
 ConstantPool::klass_at()
 ConstantPool::klass_at_impl()
-SystemDictionary::resolve_or_fail()
+SystemDictionary::resolve_or_fail() -> JavaCalls::call_virtual -> loadClass(java code) -> defineClass(java code) -> ClassFileParser::parseClassFile -> JVMTI::post_class_file_load_hook
 
 // resolve_virtual_call()调用栈，先通过方法名和签名在resolve_method()中查找对应的方法，再在runtime_resolve_virtual_method中进行解析映射
 LinkResolver::resolve_virtual_call()

@@ -148,8 +148,8 @@ DefNewGeneration::compute_new_size -> DefNewGeneration::expand -> VirtualSpace::
 ClassFileParser::parseClassFile ->  InstanceKlass::allocate_instance_klass (Allocate in meta)
                                     java_lang_Class::create_mirror (Allocate mirror and initialize static fields in heap)
 对象初始化内存分配 (Allocate in heap)
-UseTLAB -> allocate on TLAB (TLAB is on edan and allocate new TLAB when it is consumed)
-allow_shared_alloc -> allocate on Edan via cmpxchg
+UseTLAB -> allocate on TLAB (TLAB is on edan and allocate new TLAB when it is consumed，TLAB will be filled with memory when oop is allocated)
+allow_shared_alloc -> allocate on Edan via cmpxchg (only DefNewGeneration allowed)
 slow_case -> InterpreterRuntime::_new -> InstanceKlass::allocate_instance
 
 YGC: Generation is DefNewGeneration
@@ -277,6 +277,7 @@ CMSCollector::do_remark_parallel
 CompactibleFreeListSpace::blk_iterate_careful -> SweepClosure::do_blk_careful
 
 G1:
+Humongous size = G1HeapRegionSize / 2
 YGC:
 G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_collection_set -> G1ParTask::work -> G1RootProcessor::evacuate_roots -> is_task_claimed -> G1ParCopyClosure::do_oop_work
                                                                                                                  -> G1RootProcessor::scan_remembered_sets -> G1RemSet::oops_into_collection_set_do -> G1RemSet::updateRS -> G1CollectedHeap::iterate_dirty_card_closure -> RefineRecordRefsIntoCSCardTableEntryClosure::do_card_ptr
