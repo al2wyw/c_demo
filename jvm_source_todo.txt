@@ -127,7 +127,7 @@ if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额�
 内存分配及回收:
 卡表、偏移表、写屏障/读屏障 (共同协作以解决跨代引用问题)
 卡表: CardTableRS extends GenRemSet
-卡表是一个字节的集合，每一个字节可以用来表示老年代某一区域中的对象是否持有新生代对象的引用。每个卡表项对应一个卡页，卡页（Card Page）大小为512字节。
+卡表是一个字节的集合，每一个字节可以用来表示老年代某一区域中的对象是否持有新生代对象的引用(字节用来标识各种状态)。每个卡表项对应一个卡页，卡页（Card Page）大小为512字节。
 偏移表: BlockOffsetSharedArray
 偏移表记录脏卡页中第一个对象相对卡页开始地址的偏移量
 写(前/后)屏障: CardTableModRefBSForCTRS
@@ -173,6 +173,7 @@ GenCollectedHeap::process_roots: (年轻代主要是从各个地方扫描出所�
 •ClassLoaderDataGraph::oops_do（）或 ClassLoaderDataGraph:always_strong_oops_do（）：每个 ClassLoader 实例都对应一个 ClassLoaderData，后者保存了前者加载的所有 Klass、加载过程中的依赖和常量池引用。可以通过 ClassLoaderDataGraph 遍历所有的 ClassLoaderData 实例。
 •StringTable::possibly_parallel_oops_do（）或 StringTable::oops_do（）：StringTable 用来支持字符串驻留。
 •CodeCache::scavenge_root_nmethods_do（）或 CodeCache::blobs_do（）：CodeCache 代码引用。
+Thread 有 resource_area、active_handles(JNI)和handle_area，Thread::oops_do负责回收active_handles和handle_area，resource_area靠ResourceMark维护
 
 CardTableRS::younger_refs_iterate: (年老代主要是从脏卡里的oop的引用中扫描出根oop)
 Filtering_DCTOC::walk_mem_region
@@ -280,13 +281,19 @@ G1:
 Humongous size = G1HeapRegionSize / 2
 YGC:
 G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_collection_set -> G1ParTask::work -> G1RootProcessor::evacuate_roots -> is_task_claimed -> G1ParCopyClosure::do_oop_work
-                                                                                                                 -> G1RootProcessor::scan_remembered_sets -> G1RemSet::oops_into_collection_set_do -> G1RemSet::updateRS -> G1CollectedHeap::iterate_dirty_card_closure -> RefineRecordRefsIntoCSCardTableEntryClosure::do_card_ptr
-                                                                                                                                                                                                   -> G1RemSet::scanRS -> ???
+                                                                                                                 -> G1RootProcessor::scan_remembered_sets -> G1RemSet::oops_into_collection_set_do -> G1RemSet::updateRS -> G1CollectedHeap::iterate_dirty_card_closure -> DirtyCardQueueSet::apply_closure_to_completed_buffer
+                                                                                                                                                                                                   -> G1RemSet::scanRS -> ScanRSClosure::doHeapRegion ->
                                                                                                                  -> G1ParEvacuateFollowersClosure::do_void -> G1ParScanThreadState::steal_and_trim_queue -> G1ParScanThreadState::do_oop_evac (same as G1ParCopyClosure::do_oop_work)
                                                   -> G1CollectedHeap::free_collection_set -> ???
+                                                  -> ...
 
-G1ParCopyClosure(with barrier or with no barrier)::do_oop_work -> G1ParScanThreadState::copy_to_survivor_space -> G1ParGCAllocator::plab_allocate copy到survivor region的G1ParGCAllocBuffer(PLAB,线程独占) or copy到old region的PLAB
-                                                                                                               -> G1ParScanThreadState::push_on_queue
+G1ParCopyClosure(with barrier or with no barrier)::do_oop_work(会判断oop是否在cset)-> G1ParScanThreadState::copy_to_survivor_space -> G1ParGCAllocator::plab_allocate copy到survivor region的G1ParGCAllocBuffer(PLAB,线程独占) or copy到old region的PLAB
+                                                                                                                                 -> G1ParScanThreadState::push_on_queue
+
+RemSet:
+DirtyCardQueueSet::apply_closure_to_completed_buffer -> DirtyCardQueue::apply_closure_to_buffer -> RefineRecordRefsIntoCSCardTableEntryClosure::do_card_ptr -> G1RemSet::refine_card -> HeapRegion::oops_on_card_seq_iterate_careful -> G1UpdateRSOrPushRefOopClosure::do_oop
+G1UpdateRSOrPushRefOopClosure::do_oop -> G1ParPushHeapRSClosure::do_oop -> G1ParScanThreadState::push_on_queue
+                                   or -> HeapRegionRemSet::add_reference -> OtherRegionsTable::add_reference (OtherRegionsTable就是per region CardTableRS，采用三种颗粒度的数据结构进行引用关系记录)
 
 MIX GC: (including G1CollectedHeap::do_collection_pause_at_safepoint, should_start_conc_mark is true)
 should_start_conc_mark的触发条件 -> set_initiate_conc_mark_if_possible -> need_to_start_conc_mark -> IHOP
