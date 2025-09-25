@@ -279,7 +279,7 @@ CompactibleFreeListSpace::blk_iterate_careful -> SweepClosure::do_blk_careful
 
 G1:
 Humongous size = G1HeapRegionSize / 2
-YGC:
+YGC: (多个线程各跑各的G1ParTask，根据worker_id分配全局资源)
 G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_collection_set -> G1ParTask::work -> G1RootProcessor::evacuate_roots -> is_task_claimed -> G1ParCopyClosure::do_oop_work
                                                                                                                  -> G1RootProcessor::scan_remembered_sets -> G1RemSet::oops_into_collection_set_do -> G1RemSet::updateRS -> G1CollectedHeap::iterate_dirty_card_closure -> DirtyCardQueueSet::apply_closure_to_completed_buffer
                                                                                                                                                                                                    -> G1RemSet::scanRS -> ScanRSClosure::doHeapRegion ->
