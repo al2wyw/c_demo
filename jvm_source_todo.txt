@@ -148,7 +148,7 @@ DefNewGeneration::compute_new_size -> DefNewGeneration::expand -> VirtualSpace::
 ClassFileParser::parseClassFile ->  InstanceKlass::allocate_instance_klass (Allocate in meta)
                                     java_lang_Class::create_mirror (Allocate mirror and initialize static fields in heap)
 对象初始化内存分配 (Allocate in heap)
-UseTLAB -> allocate on TLAB (TLAB is on edan and allocate new TLAB when it is consumed，TLAB will be filled with memory when oop is allocated)
+UseTLAB -> allocate on TLAB (TLAB is on edan and allocate new TLAB when it is consumed，TLAB will be filled with memory when oop is allocated, TLAB不够大要丢弃时要塞入dummy object保证内存parsable)
 allow_shared_alloc -> allocate on Edan via cmpxchg (only DefNewGeneration allowed)
 slow_case -> InterpreterRuntime::_new -> InstanceKlass::allocate_instance
 
@@ -175,7 +175,7 @@ GenCollectedHeap::process_roots: (年轻代主要是从各个地方扫描出所�
 •CodeCache::scavenge_root_nmethods_do（）或 CodeCache::blobs_do（）：CodeCache 代码引用。
 Thread 有 resource_area、active_handles(JNI)和handle_area，Thread::oops_do负责回收active_handles和handle_area，resource_area靠ResourceMark维护
 
-CardTableRS::younger_refs_iterate: (年老代主要是从脏卡里的oop的引用中扫描出根oop)
+CardTableRS::younger_refs_iterate: (主要是从年老代脏卡对应的内存里一个接一个oop的引用中扫描出根oop) 卡表(CardTableRS)在heap全局唯一
 Filtering_DCTOC::walk_mem_region
 ContiguousSpaceDCTOC::walk_mem_region_with_cl
 oopDesc::oop_iterate (返回oop size)
@@ -282,18 +282,19 @@ Humongous size = G1HeapRegionSize / 2
 YGC: (多个线程各跑各的G1ParTask，根据worker_id分配全局资源)
 G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_collection_set -> G1ParTask::work -> G1RootProcessor::evacuate_roots -> is_task_claimed -> G1ParCopyClosure::do_oop_work
                                                                                                                  -> G1RootProcessor::scan_remembered_sets -> G1RemSet::oops_into_collection_set_do -> G1RemSet::updateRS -> G1CollectedHeap::iterate_dirty_card_closure -> DirtyCardQueueSet::apply_closure_to_completed_buffer
-                                                                                                                                                                                                   -> G1RemSet::scanRS -> ScanRSClosure::doHeapRegion ->
+                                                                                                                                                                                                   -> G1RemSet::scanRS -> ScanRSClosure::doHeapRegion -> HeapRegionDCTOC::walk_mem_region
                                                                                                                  -> G1ParEvacuateFollowersClosure::do_void -> G1ParScanThreadState::steal_and_trim_queue -> G1ParScanThreadState::do_oop_evac (same as G1ParCopyClosure::do_oop_work)
                                                   -> G1CollectedHeap::free_collection_set -> ???
                                                   -> ...
 
-G1ParCopyClosure(with barrier or with no barrier)::do_oop_work(会判断oop是否在cset)-> G1ParScanThreadState::copy_to_survivor_space -> G1ParGCAllocator::plab_allocate copy到survivor region的G1ParGCAllocBuffer(PLAB,线程独占) or copy到old region的PLAB
+G1ParCopyClosure(with barrier or with no barrier)::do_oop_work(会判断oop是否在cset)-> G1ParScanThreadState::copy_to_survivor_space -> G1ParGCAllocator::plab_allocate copy到survivor region的G1ParGCAllocBuffer(PLAB,线程独占,YoungPLABSize) or copy到old region的PLAB(OLdPLABSize)
                                                                                                                                  -> G1ParScanThreadState::push_on_queue
 
-RemSet:
+RemSet: 全局唯一的卡表(G1RemSet)记录region垃圾回收状态(跟CardTableRS相类似) + per region Table记忆集(HeapRegionRemSet)记录引用关系
 DirtyCardQueueSet::apply_closure_to_completed_buffer -> DirtyCardQueue::apply_closure_to_buffer -> RefineRecordRefsIntoCSCardTableEntryClosure::do_card_ptr -> G1RemSet::refine_card -> HeapRegion::oops_on_card_seq_iterate_careful -> G1UpdateRSOrPushRefOopClosure::do_oop
 G1UpdateRSOrPushRefOopClosure::do_oop -> G1ParPushHeapRSClosure::do_oop -> G1ParScanThreadState::push_on_queue
-                                   or -> HeapRegionRemSet::add_reference -> OtherRegionsTable::add_reference (OtherRegionsTable就是per region CardTableRS，采用三种颗粒度的数据结构进行引用关系记录)
+                                   or -> HeapRegionRemSet::add_reference -> OtherRegionsTable::add_reference (采用三种颗粒度的数据结构进行引用关系记录: spare table -> per region Table -> bitmap, 前者满了后转变为后者) per region Table内部也是bitmap，记录引用对象addr距离其heapRegion起始addr的offset/512，bitmap大小为HeapRegionSize / 512
+Refine 线程处理 DCQS 中绿区和黄区的DCQ, 白区的DCQ 留给 GC 线程处理(YGC)，而红区的 DCQ 直接在 Mutator 线程中处理。
 
 MIX GC: (including G1CollectedHeap::do_collection_pause_at_safepoint, should_start_conc_mark is true)
 should_start_conc_mark的触发条件 -> set_initiate_conc_mark_if_possible -> need_to_start_conc_mark -> IHOP
