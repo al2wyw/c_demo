@@ -283,7 +283,7 @@ YGC: (多个线程各跑各的G1ParTask，根据worker_id分配全局资源)
 G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_collection_set -> G1ParTask::work -> G1RootProcessor::evacuate_roots -> is_task_claimed -> G1ParCopyClosure::do_oop_work
                                                                                                                  -> G1RootProcessor::scan_remembered_sets -> G1RemSet::oops_into_collection_set_do -> G1RemSet::updateRS -> G1CollectedHeap::iterate_dirty_card_closure -> DirtyCardQueueSet::apply_closure_to_completed_buffer
                                                                                                                                                                                                    -> G1RemSet::scanRS -> ScanRSClosure::doHeapRegion -> HeapRegionDCTOC::walk_mem_region
-                                                                                                                 -> G1ParEvacuateFollowersClosure::do_void -> G1ParScanThreadState::steal_and_trim_queue -> G1ParScanThreadState::do_oop_evac (same as G1ParCopyClosure::do_oop_work)
+                                                                                                                 -> G1ParEvacuateFollowersClosure::do_void -> G1ParScanThreadState::steal_and_trim_queue -> G1ParScanThreadState::do_oop_evac (same as G1ParCopyClosure::do_oop_work) 整个过程比较耗时需要steal机制负载均衡
                                                   -> G1CollectedHeap::free_collection_set -> ???
                                                   -> ...
 
@@ -296,8 +296,8 @@ G1UpdateRSOrPushRefOopClosure::do_oop -> G1ParPushHeapRSClosure::do_oop -> G1Par
                                    or -> HeapRegionRemSet::add_reference -> OtherRegionsTable::add_reference (采用三种颗粒度的数据结构进行引用关系记录: spare table -> per region Table -> bitmap, 前者满了后转变为后者) per region Table内部也是bitmap，记录引用对象addr距离其heapRegion起始addr的offset/512，bitmap大小为HeapRegionSize / 512
 Refine 线程处理 DCQS 中绿区和黄区的DCQ, 白区的DCQ 留给 GC 线程处理(YGC)，而红区的 DCQ 直接在 Mutator 线程中处理。
 
-MIX GC: (including G1CollectedHeap::do_collection_pause_at_safepoint, should_start_conc_mark is true)
-should_start_conc_mark的触发条件 -> set_initiate_conc_mark_if_possible -> need_to_start_conc_mark -> IHOP
+MIX GC: (including G1CollectedHeap::do_collection_pause_at_safepoint, should_start_conc_mark is true, gcs_are_young is true)
+should_start_conc_mark的触发条件 -> set_initiate_conc_mark_if_possible -> need_to_start_conc_mark -> IHOP (record_collection_pause_end)
                                                                       ->  force_initial_mark_if_outside_cycle
 ConcurrentMarkThread::run -> ConcurrentMark::scanRootRegions -> CMRootRegionScanTask::work -> ConcurrentMark::scanRootRegion -> G1RootRegionScanClosure::do_oop
                           -> ConcurrentMark::markFromRoots() -> CMConcurrentMarkingTask::work -> CMTask::do_marking_step
