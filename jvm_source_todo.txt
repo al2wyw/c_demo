@@ -205,7 +205,7 @@ ParScanThreadState::alloc_in_to_space_slow ->  Space::par_allocate
                                                CFLS_LAB::  ??? // CFLS_LAB的内存分配
 
 ParEvacuateFollowersClosure::do_void(根间接引用,实现方式不同)
-ParScanThreadState::trim_queues(0) //Scan to-space and old-gen objs -> ParScanClosure::do_oop_work
+ParScanThreadState::trim_queues(0) //Scan to-space and old-gen objs -> oopDesc::oop_iterate -> ParScanClosure::do_oop_work
 task_queues()->steal //steal from other thread, go back to trim_queues
 ParNewGeneration::take_from_overflow_list //steal from global overflow list, go back to trim_queues
 task_queue 就是 work_queue，ParNewGeneration::collect 有初始化逻辑
@@ -288,7 +288,7 @@ G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_c
                                                   -> ...
 
 G1ParCopyClosure(with barrier or with no barrier)::do_oop_work(会判断oop是否在cset)-> G1ParScanThreadState::copy_to_survivor_space -> G1ParGCAllocator::plab_allocate copy到survivor region的G1ParGCAllocBuffer(PLAB,线程独占,YoungPLABSize) or copy到old region的PLAB(OLdPLABSize)
-                                                                                                                                 -> G1ParScanThreadState::push_on_queue
+                                                                                                                                 -> oopDesc::oop_iterate_backwards -> InstanceKlass::oop_oop_iterate_backwards_nv -> G1ParScanClosure::do_oop_nv -> G1ParScanThreadState::push_on_queue
 
 RemSet: 全局唯一的卡表(G1RemSet)记录region垃圾回收状态(跟CardTableRS相类似) + per region Table记忆集(HeapRegionRemSet)记录引用关系
 DirtyCardQueueSet::apply_closure_to_completed_buffer -> DirtyCardQueue::apply_closure_to_buffer -> RefineRecordRefsIntoCSCardTableEntryClosure::do_card_ptr -> G1RemSet::refine_card -> HeapRegion::oops_on_card_seq_iterate_careful -> G1UpdateRSOrPushRefOopClosure::do_oop
@@ -297,7 +297,7 @@ G1UpdateRSOrPushRefOopClosure::do_oop -> G1ParPushHeapRSClosure::do_oop -> G1Par
 Refine 线程处理 DCQS 中绿区和黄区的DCQ, 白区的DCQ 留给 GC 线程处理(YGC)，而红区的 DCQ 直接在 Mutator 线程中处理。
 
 MIX GC:
-G1CollectedHeap::do_collection_pause_at_safepoint, should_start_conc_mark is true, gcs_are_young is true, 一次完整的YGC (stw)
+G1CollectedHeap::do_collection_pause_at_safepoint, should_start_conc_mark is true, gcs_are_young is true, G1ParCopyClosure开启G1MarkFromRoot(ConcurrentMark::grayRoot),  一次完整的YGC (stw)
 
 record_collection_pause_end，YGC结束后才会判断下一次YGC是否开启mark或者mix gc:
 should_start_conc_mark的触发条件 -> set_initiate_conc_mark_if_possible -> need_to_start_conc_mark -> IHOP
@@ -306,14 +306,24 @@ mix gc的触发条件 -> record_concurrent_mark_cleanup_completed -> next_gc_sho
 
 ConcurrentMarkThread::run -> ConcurrentMark::scanRootRegions -> CMRootRegionScanTask::work -> ConcurrentMark::scanRootRegion(survivor regions) -> G1RootRegionScanClosure::do_oop
                           -> ConcurrentMark::markFromRoots() -> CMConcurrentMarkingTask::work -> CMTask::do_marking_step
-                          -> CMCheckpointRootsFinalClosure(VM_CGC_Operation) -> ConcurrentMark::checkpointRootsFinal -> CMTask::do_marking_step
+                          -> CMCheckpointRootsFinalClosure(VM_CGC_Operation) -> ConcurrentMark::checkpointRootsFinal -> CMTask::do_marking_step (has_overflown会导致重新ConcurrentMark)
                           -> CMCleanUp(VM_CGC_Operation) -> ConcurrentMark::cleanup()
 
-G1CollectedHeap::do_collection_pause_at_safepoint finalize_cset 增加了old region，实现增量copy (stw)
+G1RootRegionScanClosure::do_oop -> ConcurrentMark::grayRoot -> ConcurrentMark::par_mark_and_count -> 更新nextMarkBitMap和计算hr内的活跃内存
 
-G1RootRegionScanClosure::do_oop -> ConcurrentMark::grayRoot -> ConcurrentMark::par_mark_and_count -> 更新_nextMarkBitMap和计算hr内的活跃内存
+CMTask::do_marking_step -> drain_satb_buffers -> SATBMarkQueueSet::apply_closure_to_completed_buffer -> CMSATBBufferClosure::do_entry -> CMTask::make_reference_grey
+                        -> drain_local_queue -> CMTaskQueue::pop_local -> CMTask::process_grey_object<true>
+                        -> drain_global_stack -> steal from other queue and then drain_local_queue
+                        -> nextMarkBitMap->iterate -> CMBitMapClosure::do_bit -> CMTask::process_grey_object<true>
+                                                                              -> drain_local_queue
+                                                                              -> drain_global_stack
 
-CMTask::do_marking_step ->
+CMTask::process_grey_object<true> -> oopDesc::oop_iterate -> InstanceKlass::oop_oop_iterate_nv -> G1CMOopClosure::do_oop -> CMTask::make_reference_grey
+
+CMTask::make_reference_grey -> ConcurrentMark::par_mark_and_count
+                            -> CMTaskQueue::push
+
+G1CollectedHeap::do_collection_pause_at_safepoint finalize_cset 增加了old region，实现增量copy的mix gc (stw)
 
 FGC:
 G1CollectedHeap::do_full_collection ->
