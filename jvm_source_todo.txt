@@ -290,7 +290,7 @@ G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_c
 G1ParCopyClosure(with barrier or with no barrier)::do_oop_work(会判断oop是否在cset)-> G1ParScanThreadState::copy_to_survivor_space -> G1ParGCAllocator::plab_allocate copy到survivor region的G1ParGCAllocBuffer(PLAB,线程独占,YoungPLABSize) or copy到old region的PLAB(OLdPLABSize)
                                                                                                                                  -> oopDesc::oop_iterate_backwards -> InstanceKlass::oop_oop_iterate_backwards_nv -> G1ParScanClosure::do_oop_nv -> G1ParScanThreadState::push_on_queue
 
-RemSet: 全局唯一的卡表(G1RemSet)记录region垃圾回收状态(跟CardTableRS相类似) + per region Table记忆集(HeapRegionRemSet)记录引用关系
+RemSet: 全局唯一的卡表(CardTableRS in G1CollectedHeap)记录region垃圾回收状态 + per region Table记忆集(HeapRegionRemSet)记录引用关系
 DirtyCardQueueSet::apply_closure_to_completed_buffer -> DirtyCardQueue::apply_closure_to_buffer -> RefineRecordRefsIntoCSCardTableEntryClosure::do_card_ptr -> G1RemSet::refine_card -> HeapRegion::oops_on_card_seq_iterate_careful -> G1UpdateRSOrPushRefOopClosure::do_oop
 G1UpdateRSOrPushRefOopClosure::do_oop -> G1ParPushHeapRSClosure::do_oop -> G1ParScanThreadState::push_on_queue
                                    or -> HeapRegionRemSet::add_reference -> OtherRegionsTable::add_reference (采用三种颗粒度的数据结构进行引用关系记录: spare table -> per region Table -> bitmap, 前者满了后转变为后者) per region Table内部也是bitmap，记录引用对象addr距离其heapRegion起始addr的offset/512，bitmap大小为HeapRegionSize / 512
