@@ -330,3 +330,13 @@ G1CollectedHeap::do_full_collection ->
 
 string去重: +XX:UseStringDeduplication
 G1StringDedup::enqueue_from_mark
+
+内存管理的总结:
+碰撞指针 or 空闲链表
+Arena(不是链表) -> Chunk链表
+Chunk -> 4种固定大小的Chunk -> alloc from ChunkPool or os::malloc(ChunkPool is empty)
+                             free return to ChunkPool
+         非固定大小的Chunk -> os::malloc
+                            os::free
+4种固定大小: tiny, small, normal, large, 大于large都是非固定 (Arena::grow)
+Chunk使用碰撞指针进行内存分配
