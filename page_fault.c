@@ -6,6 +6,7 @@
 
 // 用bpftrace可抓到每次Page Fault的地址
 // 主缺页(swap,非常影响性能) 次缺页(物理内存映射)
+// perf stat -e page-faults // perf list
 
 int const PAGE_SIZE = 4096;
 
