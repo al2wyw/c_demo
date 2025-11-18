@@ -12,7 +12,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-// cachetop pcstat to check
+// cachetop yum install -y bcc-tools linux4.1+
+// pcstat go install github.com/tobert/pcstat@latest
+// sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
 
 void main(int argc, char *argv[]) {
 
@@ -39,9 +41,15 @@ void main(int argc, char *argv[]) {
     char *addr = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (addr == NULL) {
         fprintf(stderr, "mmap error: %s\n", strerror(errno));
+        close(fd);
         return;
     }
-    madvise(addr, size, MADV_WILLNEED);
+    // just advise, knernel may reject
+    if (madvise(addr, size, MADV_WILLNEED) == -1) {
+        fprintf(stderr, "advise will need failed %s\n", strerror(errno));
+        close(fd);
+        return;
+    }
 
     for (size_t i = 0; i < size; ++i) {
         char c =addr[i];
