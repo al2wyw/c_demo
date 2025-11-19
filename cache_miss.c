@@ -2,9 +2,8 @@
 // Created by 李扬 on 2025/11/19.
 //
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <time.h>
 
 // cat /sys/devices/system/cpu/cpu1/cache/index0/coherency_line_size
 
@@ -12,12 +11,12 @@
 
 unsigned int next_seq(unsigned int seed)
 {
-return seed * 1 + 11;
+	return seed * 1 + 11;
 }
 
 unsigned int next_rnd(unsigned int seed)
 {
-return seed * 1664525 + 1013904223;
+	return seed * 1664525 + 1013904223;
 }
 
 int arr[MAX];
