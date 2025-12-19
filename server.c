@@ -136,7 +136,7 @@ int accept_socket(int listen_st)
     return accept_st;
 }
 
-void pthread_cond_handle() {
+void* pthread_cond_handle(void* args) {
     pthread_mutex_lock(&mutex);
     count_connect++;
     char timeStamp[32];
@@ -147,16 +147,17 @@ void pthread_cond_handle() {
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
         ts.tv_sec += 5;
-        //SIGINT会触发虚假唤醒并返回 0 !!!
+        //SIGINT会触发虚假唤醒并返回 0 !!! 但pthread_sigmask可以阻塞SIGINT
         if (pthread_cond_timedwait(&cond, &mutex, &ts) != 0) {
             get_format_time_ms(timeStamp);
             printf("%s pthread_cond_wait error:%s \n", timeStamp, strerror(errno));
         }
     }
     pthread_mutex_unlock(&mutex);
+    return NULL;
 }
 
-void pthread_sigmask_run(void func()) {
+void pthread_sigmask_run(void* func(void*)) {
     sigset_t mask, old_mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGINT);  // 添加 SIGINT 信号到掩码
@@ -167,7 +168,7 @@ void pthread_sigmask_run(void func()) {
     printf("Thread: SIGINT is now blocked\n");
     // 线程执行期间 SIGINT 被阻塞
 
-    func();
+    func(NULL);
 
     // 恢复旧的信号掩码
     pthread_sigmask(SIG_SETMASK, &old_mask, NULL);
@@ -206,6 +207,7 @@ int run_server(int port)
             break;
         }
         pthread_detach(recv_thrd); //设置线程为可分离，这样的话，就不用pthread_join
+        // pthread_cond_handle(NULL);
         pthread_sigmask_run(pthread_cond_handle);
     }
     close(listen_st);
