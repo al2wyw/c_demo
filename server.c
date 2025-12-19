@@ -12,6 +12,7 @@
 #include<unistd.h>
 #include<errno.h>
 #include<pthread.h>
+#include <signal.h>
 
 #define MAXCONN 2
 #define MAXBACKLOG 5
@@ -134,6 +135,45 @@ int accept_socket(int listen_st)
     printf("accpet ip:%s \n", inet_ntoa(accept_sockaddr.sin_addr));
     return accept_st;
 }
+
+void pthread_cond_handle() {
+    pthread_mutex_lock(&mutex);
+    count_connect++;
+    char timeStamp[32];
+    while (count_connect >= MAXCONN)
+    {
+        get_format_time_ms(timeStamp);
+        printf("%s connect have already be full! %d \n", timeStamp, count_connect);
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 5;
+        //SIGINT会触发虚假唤醒并返回 0 !!!
+        if (pthread_cond_timedwait(&cond, &mutex, &ts) != 0) {
+            get_format_time_ms(timeStamp);
+            printf("%s pthread_cond_wait error:%s \n", timeStamp, strerror(errno));
+        }
+    }
+    pthread_mutex_unlock(&mutex);
+}
+
+void pthread_sigmask_run(void func()) {
+    sigset_t mask, old_mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGINT);  // 添加 SIGINT 信号到掩码
+
+    // 设置信号掩码，阻塞 SIGINT
+    pthread_sigmask(SIG_BLOCK, &mask, &old_mask);
+
+    printf("Thread: SIGINT is now blocked\n");
+    // 线程执行期间 SIGINT 被阻塞
+
+    func();
+
+    // 恢复旧的信号掩码
+    pthread_sigmask(SIG_SETMASK, &old_mask, NULL);
+    printf("Thread: SIGINT is unblocked\n");
+}
+
 int run_server(int port)
 {
     int listen_st = create_listen(port);    //创建监听socket
@@ -166,23 +206,7 @@ int run_server(int port)
             break;
         }
         pthread_detach(recv_thrd); //设置线程为可分离，这样的话，就不用pthread_join
-        pthread_mutex_lock(&mutex);
-        count_connect++;
-        char timeStamp[32];
-        while (count_connect >= MAXCONN)
-        {
-            get_format_time_ms(timeStamp);
-            printf("%s connect have already be full! %d \n", timeStamp, count_connect);
-            struct timespec ts;
-            clock_gettime(CLOCK_REALTIME, &ts);
-            ts.tv_sec += 5;
-            //SIGINT会触发虚假唤醒并返回 0 !!!
-            if (pthread_cond_timedwait(&cond, &mutex, &ts) != 0) {
-                get_format_time_ms(timeStamp);
-                printf("%s pthread_cond_wait error:%s \n", timeStamp, strerror(errno));
-            }
-        }
-        pthread_mutex_unlock(&mutex);
+        pthread_sigmask_run(pthread_cond_handle);
     }
     close(listen_st);
     return 0;
