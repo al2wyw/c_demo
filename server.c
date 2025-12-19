@@ -8,7 +8,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netinet/ip.h>
 #include <arpa/inet.h>
 #include<unistd.h>
 #include<errno.h>
@@ -22,6 +21,8 @@
 int count_connect = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; //初始化互斥锁
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER; //初始化条件变量
+
+void get_format_time_ms(char *str_time);
 
 struct pthread_socket
 {
@@ -167,19 +168,45 @@ int run_server(int port)
         pthread_detach(recv_thrd); //设置线程为可分离，这样的话，就不用pthread_join
         pthread_mutex_lock(&mutex);
         count_connect++;
+        char timeStamp[32];
         while (count_connect >= MAXCONN)
         {
-            printf("connect have already be full! %d \n", count_connect);
-            pthread_cond_wait(&cond, &mutex);
+            get_format_time_ms(timeStamp);
+            printf("%s connect have already be full! %d \n", timeStamp, count_connect);
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_sec += 5;
+            //SIGINT会触发虚假唤醒并返回 0 !!!
+            if (pthread_cond_timedwait(&cond, &mutex, &ts) != 0) {
+                get_format_time_ms(timeStamp);
+                printf("%s pthread_cond_wait error:%s \n", timeStamp, strerror(errno));
+            }
         }
         pthread_mutex_unlock(&mutex);
     }
     close(listen_st);
     return 0;
 }
+
+void signal_handler(int sig)
+{
+    fprintf(stdout, "caught signal %d\n", sig);
+}
+
+int handle_sig(int sig)
+{
+    if (signal(sig, signal_handler) == SIG_ERR ) {
+        fprintf(stdout, "cannot handle %d\n", sig);
+        return ERRORCODE;
+    }
+    fprintf(stdout, "handle %d\n", sig);
+    return 0;
+}
+
 //server main
 int main(int argc, char *argv[])
 {
+    handle_sig(SIGINT);
     if (argc < 2)
     {
         printf("Usage:port,example:8080 \n");
