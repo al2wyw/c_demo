@@ -147,7 +147,8 @@ void* pthread_cond_handle(void* args) {
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
         ts.tv_sec += 5;
-        //SIGINT会触发虚假唤醒并返回 0 !!! 但pthread_sigmask可以阻塞SIGINT
+        //SIGINT会触发虚假唤醒并返回 0 !!! 但pthread_sigmask可以阻塞SIGINT (mac)
+        //SIGINT不会触发虚假唤醒 (linux)
         if (pthread_cond_timedwait(&cond, &mutex, &ts) != 0) {
             get_format_time_ms(timeStamp);
             printf("%s pthread_cond_wait error:%s \n", timeStamp, strerror(errno));
