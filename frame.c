@@ -37,7 +37,7 @@
  * cmov: cmovg S D -> D = S when comp is greater
  *
  * 开启优化-O后非常随意，直接把调用者保护寄存器的值保存到其他的寄存器里而不是内存
- * gdb: b main; b main.c:10; b *addr; delete/enable/disable 1; x/nfu $rbp-4 f=o,x,u,s,i(str,inst) u=b,h,w,g; disass main; disass /r 0x8048000, 0x8048000+200; layout asm; ctl+c then a; focus cmd;;
+ * gdb: b main; b main.c:10; b *addr; delete/enable/disable 1; x/nfu $rbp-4 f=o,x,u,s,i(str,inst) u=b,h,w,g; disass main; disass /r 0x8048000, 0x8048000+200; layout asm; ctl+x then a; focus cmd;;
  *  r; c; finish(fi); return; util; si; ni; jump; p/x ptr; p * ptr; set x=1; display $rsp; ptype /m; info local/arg/reg/fun/addr/b xxxx; handle SIGSEGV nostop
  * 位数操作 rax 64 eax 32 ax(ah 8 al 8) 16 / movq 64 movl 32 movw 16 movb 8
  * eflags的低8bit(7 -> 0): sf zf 0 af 0 pf 1 cf
