@@ -14,15 +14,6 @@ void print(long l) {
     printf("print! %ld\n", ret);
 }
 
-int add() {
-    int result= 0;
-    int input = 1;
-    __asm__ __volatile__ ("addl %1,%0"::"m"(result), "r"(input):"cc","memory");// cc: code condition register
-
-    printf("Hello, World! %d\n", result);
-    return result;
-}
-
 void play(int* i) {
     int j = 0;
     if (i!=0) {
@@ -33,7 +24,6 @@ void play(int* i) {
 
 int main() {
     play(NULL);
-    add();
     int ret = mul(4,6);
     printf("ret %d\n", ret);
     printf("mul addr %p\n", mul);

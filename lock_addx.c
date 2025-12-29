@@ -41,6 +41,7 @@ int inc(int *value, int add) {
     );
     return old;
 }
+// cc: code condition register
 
 #define LOCK_IF_MP(mp) "cmp $0, " #mp "; je 1f; lock; 1: "
 
@@ -52,8 +53,28 @@ int cmpxchg(int exchange_value,volatile int *dest,int compare_value){
     : "cc", "memory");
     return exchange_value;
 }
-// "m" (*dest) goes along with "cmpxchgl %1,%3"
+/*
+int cmpxchg(int exchange_value,volatile int *dest,int compare_value){
+    int mp = 1;
+    __asm__ volatile (LOCK_IF_MP(%4) "cmpxchgl %1,%3"
+    : "=a" (exchange_value)
+    : "r" (exchange_value), "a" (compare_value), "m" (*dest), "r" (mp)
+    : "cc", "memory");
+    return exchange_value;
+}
+*/
 // "m" with pointer variable is a little bit tricky
+
+int add() {
+    int result= 0;
+    int input = 1;
+    __asm__ __volatile__ ("addl %1,%0"::"m"(result), "r"(input): "memory"); //may be invalid use of "m"
+    // __asm__ __volatile__ ("addl %2,%0":"=r" (result):"0"(result), "r"(input):"memory");
+    // 0,1,2,3.... use for input-output variable
+
+    printf("Hello, World! %d\n", result);
+    return result;
+}
 
 //callback
 void *func(void *arg) {
@@ -68,6 +89,7 @@ void *func(void *arg) {
 
 
 int main() {
+    add();
     pthread_t th_id[THREAD_SIZE] = {0};
 
     int i = 0;
