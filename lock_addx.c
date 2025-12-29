@@ -42,6 +42,17 @@ int inc(int *value, int add) {
     return old;
 }
 
+#define LOCK_IF_MP(mp) "cmp $0, " #mp "; je 1f; lock; 1: "
+
+int cmpxchg(int exchange_value,volatile int *dest,int compare_value){
+    int mp = 1;
+    __asm__ volatile (LOCK_IF_MP(%4) "cmpxchgl %1,(%3)"
+    : "=a" (exchange_value)
+    : "r" (exchange_value), "a" (compare_value), "r" (dest), "r" (mp)
+    : "cc", "memory");
+    return exchange_value;
+}
+
 //callback
 void *func(void *arg) {
     int *pcount = (int *) arg;
