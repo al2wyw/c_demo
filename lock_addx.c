@@ -52,6 +52,8 @@ int cmpxchg(int exchange_value,volatile int *dest,int compare_value){
     : "cc", "memory");
     return exchange_value;
 }
+// "m" (*dest) goes along with "cmpxchgl %1,%3"
+// "m" with pointer variable is a little bit tricky
 
 //callback
 void *func(void *arg) {

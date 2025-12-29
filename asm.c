@@ -17,9 +17,10 @@ void print(long l) {
 int add() {
     int result= 0;
     int input = 1;
-    __asm__ __volatile__ ("addl %1,%0":"=r"(result): "m"(input):"cc");// cc: code condition register
+    __asm__ __volatile__ ("addl %1,%0"::"m"(result), "r"(input):"cc","memory");// cc: code condition register
 
     printf("Hello, World! %d\n", result);
+    return result;
 }
 
 void play(int* i) {
