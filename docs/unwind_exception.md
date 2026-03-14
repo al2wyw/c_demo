@@ -1,11 +1,3 @@
-[任务规划完成]
-[读取文件]
-再读取 `SharedRuntime::exception_handler_for_return_address` 的实现，以及 `generate_handle_exception` 的相关代码，以便完整理解 unwind 流程。
-[查找文件]
-[读取文件]
-现在我已经掌握了完整的实现细节，可以给出全面的分析。
-
----
 
 # `generate_unwind_exception` 实现原理
 
