@@ -27,7 +27,7 @@ InterpreterRuntime::throw_pending_exception do nothing
 
 编译执行:
 C1 athrow => jmp RuntimeStub - unwind_exception Runtime1 stub(Runtime1::generate_unwind_exception) => exception_handler_for_return_address
-C1 athrow => call RuntimeStub - handle_exception_nofpu Runtime1 stub(Runtime1::generate_handle_exception 有多种不同的 handle_exception ???)
+C1 athrow => call RuntimeStub - handle_exception_nofpu Runtime1 stub(Runtime1::generate_handle_exception 有多种不同的 handle_exception)
 C1 implicit exception dispatches to call stub addr
 -Xcomp:
 C2 athrow => (opt) call UncommonTrapBlob
@@ -37,7 +37,7 @@ C2 athrow => jmp RuntimeStub - _rethrow_Java (全走rethrow，无论什么except
 
 Exception Handler C1
 call RuntimeStub - handle_exception_from_callee Runtime1 stub => jmp the return of Runtime1::exception_handler_for_pc => SharedRuntime::compute_compiled_exc_handler
-call 0x00007ffff647fdd8 看源码handle_exception_from_callee应该没有后续这个call调用 ???
+call 0x00007ffff647fdd8 看源码Exception Handler生成的代码应该没有后续这个call调用，难道是patch的???
 
 Exception Handler C2
 jmp ExceptionBlob => jmp the return of OptoRuntime::handle_exception_C => SharedRuntime::compute_compiled_exc_handler
@@ -91,7 +91,7 @@ uncommon trap exception:
 
 uncommon trap(C2特有)
 implicit exception, rare branch hit(Deoptimization::DeoptReason) => jmp other code addr to call UncommonTrapBlob
-对比opt和deopt后的代码好像没有什么区别(除了call UncommonTrapBlob被替换成真正的处理逻辑)，那uncommon trap的机制有什么作用 ???
+对比opt和deopt后的代码好像没有什么区别(除了call UncommonTrapBlob被替换成真正的处理逻辑)，那uncommon trap的机制有什么作用? (参考uncommon_trap.md)
 
 memory order机制
 four primitive memory barrier operations:
