@@ -10,6 +10,8 @@ C1（Client Compiler）中有两条异常处理路径，理解它们的区别是
 | **当前帧处理** | `handle_exception` | 当前编译帧内有 catch 块，直接在本帧处理 |
 | **展开（Unwind）** | `unwind_exception` | 当前帧没有 catch 块，需要**弹出当前帧**，交给调用者处理 |
 
+**触发点**: LIRGenerator::do_Throw
+
 ---
 
 ## `generate_unwind_exception` 完整流程
