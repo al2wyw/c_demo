@@ -124,6 +124,28 @@ get value from field
 volatile_barrier:
 if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额外操作
 
+内联优化CompiledIC:
+resolve_opt_virtual_call_C / resolve_virtual_call_C {
+    callee_method = SharedRuntime::resolve_helper(thread, true, true / false, CHECK_NULL);
+    thread->set_vm_result_2(callee_method());
+    return callee_method->verified_code_entry();
+}
+// is_optimized 仅仅用于选择UEP还是VEP来进行code patching
+methodHandle SharedRuntime::resolve_helper(JavaThread *thread, bool is_virtual, bool is_optimized, TRAPS)
+    SharedRuntime::resolve_sub_helper(thread, is_virtual, is_optimized, CHECK_NULL);
+        SharedRuntime::find_callee_info()
+            SharedRuntime::find_callee_info_helper
+                LinkResolver::resolve_invoke
+        if (is_virtual) {
+            CompiledIC::compute_monomorphic_entry(callee_method, h_klass, is_optimized, static_bound, virtual_call_info,
+                             CHECK_(methodHandle()));
+            build CompiledIC and code patching CompiledIC;
+        } else {
+            CompiledStaticCall::compute_entry(callee_method, static_call_info);
+            build CompiledStaticCall and code patching CompiledStaticCall;
+        }
+
+
 内存分配及回收:
 卡表、偏移表、写屏障/读屏障 (共同协作以解决跨代引用问题)
 卡表: CardTableRS extends GenRemSet
