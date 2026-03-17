@@ -94,6 +94,4 @@ code patching 动态二进制插桩技术
 
 CompiledIC通过code patching把 caller(last frame) 的call resolve_opt_virtual_call改成call target method entry address(UEP/VEP)，从而避免调用LinkResolver::resolve_invoke
 
-各种内联优化: 单态内联、双态内联、多态内联、守护内联或做内联缓存优化???
-UEP用于实现虚方法分派的monomorphic inline cache: CompiledIC::compute_monomorphic_entry
-SharedRuntime::generate_i2c2i_adapters: c2i_unverified_entry ??? used in CompiledIC::compute_monomorphic_entry
+各种内联优化: 单态内联、双态内联、多态内联、守护内联(Guarded Inlining)或做内联缓存优化 (参考深入理解Java虚拟机)
