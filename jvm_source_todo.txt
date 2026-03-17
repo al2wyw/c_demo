@@ -124,7 +124,7 @@ get value from field
 volatile_barrier:
 if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额外操作
 
-内联优化CompiledIC: (https://wiki.openjdk.org/spaces/HotSpot/pages/11829292/Overview+of+CompiledIC+and+CompiledStaticCall)
+内联缓存优化CompiledIC: (https://wiki.openjdk.org/spaces/HotSpot/pages/11829292/Overview+of+CompiledIC+and+CompiledStaticCall)
 resolve_opt_virtual_call_C / resolve_virtual_call_C {
     callee_method = SharedRuntime::resolve_helper(thread, true, true / false, CHECK_NULL);
     thread->set_vm_result_2(callee_method());
@@ -147,6 +147,17 @@ methodHandle SharedRuntime::resolve_helper(JavaThread *thread, bool is_virtual, 
 UEP and c2i_unverified_entry(SharedRuntime::generate_i2c2i_adapters):
 check class type of call receiver
 jne ic_miss_blob -> megamorphic call -> using vtable dispatch
+
+内联优化inline(CHA):
+GraphBuilder::invoke
+    ciMethod* cha_monomorphic_target = target->find_monomorphic_target
+    // virtual -> special (Dependencies::DepType::unique_concrete_method runtime invariants)
+    ciMethod* inline_target = (cha_monomorphic_target != NULL) ? cha_monomorphic_target : target
+    GraphBuilder::try_inline(inline_target)
+
+LIRGenerator::do_Invoke
+    __ call_opt_virtual
+    __ call_virtual
 
 内存分配及回收:
 卡表、偏移表、写屏障/读屏障 (共同协作以解决跨代引用问题)
