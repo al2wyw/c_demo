@@ -149,7 +149,8 @@ check class type of call receiver
 jne ic_miss_blob -> megamorphic call -> using vtable dispatch
 
 内联优化inline(CHA):
-GraphBuilder::invoke
+C1:
+GraphBuilder::invoke(HIR)
     ciMethod* cha_monomorphic_target = target->find_monomorphic_target
     // virtual -> special (Dependencies::DepType::unique_concrete_method runtime invariants)
     ciMethod* inline_target = (cha_monomorphic_target != NULL) ? cha_monomorphic_target : target
@@ -158,6 +159,10 @@ GraphBuilder::invoke
 LIRGenerator::do_Invoke
     __ call_opt_virtual
     __ call_virtual
+C2:
+Parse::do_call
+    Compile::call_generator
+        InlineTree::ok_to_inline
 
 内存分配及回收:
 卡表、偏移表、写屏障/读屏障 (共同协作以解决跨代引用问题)
