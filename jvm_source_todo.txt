@@ -59,7 +59,7 @@ SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpre
                                                     => (comp) nmethod::exception_begin (HSDIS反编译的stub[Exception Handler])
                                                     => (comp) StubRoutines::_catch_exception_entry for _call_stub_return_address
 
-java_lang_Throwable::fill_in_stack_trace InlineCompileOptTest 为什么ArithmeticException发生时栈是Interpret ???
+java_lang_Throwable::fill_in_stack_trace InlineCompileOptTest 为什么ArithmeticException发生时栈是Interpret ??? c2 osr level 4 生成的代码好复杂，包含inline和非inline的代码 !!!
 
 安全点机制(5种场景)
 1. 解析执行进入安全点: Interpreter::notice_safepoints() => copy_table(&_safept_table, &_active_table) ====> InterpreterRuntime::at_safepoint => IRT_ENTRY
