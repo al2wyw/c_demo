@@ -162,8 +162,10 @@ LIRGenerator::do_Invoke
     __ call_virtual
 C2:
 Parse::do_call
+    Compile::optimize_virtual_call
+        ciMethod::find_monomorphic_target
     Compile::call_generator
-        InlineTree::ok_to_inline
+        InlineTree::try_to_inline
 AtomicInteger::getAndAdd call site not reached ???
 
 内存分配及回收:
