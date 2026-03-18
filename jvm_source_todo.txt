@@ -59,6 +59,7 @@ SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpre
                                                     => (comp) nmethod::exception_begin (HSDIS反编译的stub[Exception Handler])
                                                     => (comp) StubRoutines::_catch_exception_entry for _call_stub_return_address
 
+java_lang_Throwable::fill_in_stack_trace InlineCompileOptTest 为什么ArithmeticException发生时栈是Interpret ???
 
 安全点机制(5种场景)
 1. 解析执行进入安全点: Interpreter::notice_safepoints() => copy_table(&_safept_table, &_active_table) ====> InterpreterRuntime::at_safepoint => IRT_ENTRY
@@ -72,7 +73,7 @@ SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpre
 5.2. JVM_ENTRY => ThreadInVMfromNative => transition_and_fence
 
 deopt的过程
-触发点: class加载导致class hierarchy改变；redefine class；uncommon trap exception；...
+触发点: class加载导致class hierarchy改变；redefine class；uncommon trap exception；???
 
 class加载导致class hierarchy改变:
 1. SystemDictionary::add_to_hierarchy(class hierarchy改变) -> 进入安全点，VM_Deoptimize::doit -> Deoptimization::deoptimize_dependents
@@ -163,6 +164,7 @@ C2:
 Parse::do_call
     Compile::call_generator
         InlineTree::ok_to_inline
+AtomicInteger::getAndAdd call site not reached ???
 
 内存分配及回收:
 卡表、偏移表、写屏障/读屏障 (共同协作以解决跨代引用问题)
