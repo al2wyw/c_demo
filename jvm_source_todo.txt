@@ -37,7 +37,7 @@ C2 athrow => jmp RuntimeStub - _rethrow_Java (全走rethrow，无论什么except
 
 Exception Handler C1
 call RuntimeStub - handle_exception_from_callee Runtime1 stub => jmp the return of Runtime1::exception_handler_for_pc => SharedRuntime::compute_compiled_exc_handler
-call 0x00007ffff647fdd8 看源码Exception Handler生成的代码应该没有后续这个call调用，难道是patch的???
+call 0x00007ffff647fdd8 => MacroAssembler::debug64 (should_not_reach_here())
 
 Exception Handler C2
 jmp ExceptionBlob => jmp the return of OptoRuntime::handle_exception_C => SharedRuntime::compute_compiled_exc_handler
