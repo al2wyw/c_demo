@@ -12,7 +12,8 @@ ObjectMonitor  重量级(包含自旋)
 athrow      explicit_exception
 TemplateInterpreter::_throw_XXXException_entry from bytecode asm    explicit_exception
 StubRoutines::_throw_XXXException_entry from compiled asm    explicit_exception
-asm inst: test/comp/div SIGSEGV SIGFPE (这里用到了信号机制)      implicit_exception
+asm inst: test/comp jump to call UncommonTrapBlob      explicit_exception
+asm inst: memory deref/div SIGSEGV SIGFPE (这里用到了信号机制)      implicit_exception
 
 解释执行:
 athrow => jump _throw_exception_entry
@@ -29,11 +30,13 @@ InterpreterRuntime::throw_pending_exception do nothing
 C1 athrow => jmp RuntimeStub - unwind_exception Runtime1 stub(Runtime1::generate_unwind_exception) => exception_handler_for_return_address
 C1 athrow => call RuntimeStub - handle_exception_nofpu Runtime1 stub(Runtime1::generate_handle_exception 有多种不同的 handle_exception)
 C1 implicit exception dispatches to call stub addr
+C2 null check implicit exception call UncommonTrapBlob
+C2 test check explicit exception call UncommonTrapBlob
 -Xcomp:
 C2 athrow => (opt) call UncommonTrapBlob
           => (deopt) jmp RuntimeStub - _rethrow_Java => exception_handler_for_return_address
 正常profile:
-C2 athrow => jmp RuntimeStub - _rethrow_Java (全走rethrow，无论什么exception，而且没有UncommonTrap)
+C2 athrow => jmp RuntimeStub - _rethrow_Java (全走rethrow，无论什么exception)
 
 Exception Handler C1
 call RuntimeStub - handle_exception_from_callee Runtime1 stub => jmp the return of Runtime1::exception_handler_for_pc => SharedRuntime::compute_compiled_exc_handler
