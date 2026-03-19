@@ -74,7 +74,7 @@ SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpre
 5.2. JVM_ENTRY => ThreadInVMfromNative => transition_and_fence
 
 deopt的过程
-触发点: class加载导致class hierarchy改变；redefine class；uncommon trap exception；???
+触发点: class加载导致class hierarchy改变；redefine class；uncommon trap exception；
 
 class加载导致class hierarchy改变:
 1. SystemDictionary::add_to_hierarchy(class hierarchy改变) -> 进入安全点，VM_Deoptimize::doit -> Deoptimization::deoptimize_dependents
