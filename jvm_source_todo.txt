@@ -53,13 +53,11 @@ StubRoutines::forward_exception_entry => jump return of exception_handler_for_re
 公共:
 JVM_handle_linux_signal => (interp) TemplateInterpreter::_throw_XXXException_entry
                         => (comp) StubRoutines::_throw_XXXException_entry or nmethod::continuation_for_implicit_exception
-                        (ImplicitExceptionTable(C2 has no IET) is a map: pc offset (where exception happened) to implicit exception stub addr in main code(such like ImplicitNullCheckStub))
+                        (ImplicitExceptionTable(C2 has IET only when implicit null check) is a map: pc offset (where exception happened) to implicit exception stub addr in main code(such like ImplicitNullCheckStub))
 
 SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpreter::_rethrow_exception_entry (include _throw_exception_entry asm code)
                                                     => (comp) nmethod::exception_begin (HSDIS反编译的stub[Exception Handler])
                                                     => (comp) StubRoutines::_catch_exception_entry for _call_stub_return_address
-
-java_lang_Throwable::fill_in_stack_trace InlineCompileOptTest 为什么ArithmeticException发生时栈是Interpret ??? c2 osr level 4 生成的代码好复杂，包含inline和非inline的代码 !!!
 
 安全点机制(5种场景)
 1. 解析执行进入安全点: Interpreter::notice_safepoints() => copy_table(&_safept_table, &_active_table) ====> InterpreterRuntime::at_safepoint => IRT_ENTRY
@@ -166,7 +164,6 @@ Parse::do_call
         ciMethod::find_monomorphic_target
     Compile::call_generator
         InlineTree::try_to_inline
-AtomicInteger::getAndAdd call site not reached ???
 
 内存分配及回收:
 卡表、偏移表、写屏障/读屏障 (共同协作以解决跨代引用问题)
