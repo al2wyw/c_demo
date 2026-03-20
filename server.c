@@ -149,6 +149,8 @@ void* pthread_cond_handle(void* args) {
         ts.tv_sec += 5;
         //SIGINT会触发虚假唤醒并返回 0 !!! 但pthread_sigmask可以阻塞SIGINT (mac)
         //SIGINT不会触发虚假唤醒 (linux)
+        //使用gdb 在nptl/sysdeps/unix/sysv/linux/x86_64/pthread_cond_timedwait.S的262行断点，使用handle SIGABRT nostop pass可验证
+        //refer to pthread_cond_timedwait.md
         if (pthread_cond_timedwait(&cond, &mutex, &ts) != 0) {
             get_format_time_ms(timeStamp);
             printf("%s pthread_cond_wait error:%s \n", timeStamp, strerror(errno));
@@ -208,8 +210,8 @@ int run_server(int port)
             break;
         }
         pthread_detach(recv_thrd); //设置线程为可分离，这样的话，就不用pthread_join
-        // pthread_cond_handle(NULL);
-        pthread_sigmask_run(pthread_cond_handle);
+        pthread_cond_handle(NULL);
+        // pthread_sigmask_run(pthread_cond_handle);
     }
     close(listen_st);
     return 0;
