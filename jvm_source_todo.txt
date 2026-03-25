@@ -241,12 +241,13 @@ ContiguousSpace::oop_since_save_marks_iterate_nv
 YGC: Generation is ParNewGeneration (其他与DefNewGeneration保持一致)
 ParNewGenTask::work 任务起始，多个GangWorker(WorkerThread)通过ParScanThreadState的work_queue协作进行垃圾回收, 通过GenCollectedHeap::process_roots的is_task_claimed协作进行root扫描任务
 ParScanClosure(with barrier or with no barrier)
-ParScanClosure::do_oop_work -> ParNewGeneration::copy_to_survivor_space -> to_space_alloc_buffer()->allocate_aligned copy到to区的ParGCAllocBuffer(PLAB,线程独占) or _next_gen->par_promote 晋升到next gen的local allocation buffer(CFLS_LAB,线程独占)
+ParScanClosure::do_oop_work -> ParNewGeneration::copy_to_survivor_space -> to_space_alloc_buffer()->allocate_aligned copy到to区的ParGCAllocBuffer(PLAB,线程独占) or alloc_in_to_space_slow or _next_gen->par_promote 晋升到next gen的local allocation buffer(ParGCAllocBufferWithBOT(Tenured) or CFLS_LAB(cms), 线程独占)
                                                                         -> par_scan_state->work_queue()->push(obj_to_push) or ParNewGeneration::push_on_overflow_list()
-ParScanThreadState::alloc_in_to_space_slow ->  Space::par_allocate
-                                               ParGCAllocBuffer::set_buf // PLAB的内存分配，从Space线性分配
-
-                                               CFLS_LAB::  ??? // CFLS_LAB的内存分配
+ParScanThreadState::alloc_in_to_space_slow ->  Space::par_allocate // PLAB的内存分配，从Space线性分配
+                                               ParGCAllocBuffer::set_buf
+                                               ParGCAllocBuffer::allocate_aligned
+TenuredGeneration::par_promote -> ParGCAllocBufferWithBOT::allocate // old区内存分配
+ConcurrentMarkSweepGeneration::par_promote -> CFLS_LAB::alloc ??? // cms中CFLS_LAB的内存分配
 
 ParEvacuateFollowersClosure::do_void(根间接引用,实现方式不同)
 ParScanThreadState::trim_queues(0) //Scan to-space and old-gen objs -> oopDesc::oop_iterate -> ParScanClosure::do_oop_work
@@ -284,7 +285,7 @@ CompactibleSpace::compact
 
 ParallelScavenge: (和以上完全不一样的另一套实现方式)
 
-CMS:
+CMS: (未完成)
 CMS free list: FreeList head -> FreeChunk <=> FreeChunk <- tail FreeList
 LinearAllocBlock ???
 AdaptiveFreeList(size < 257) size as index -> free chuck list
@@ -323,13 +324,25 @@ CompactibleFreeListSpace::blk_iterate_careful -> SweepClosure::do_blk_careful
 
 G1:
 Humongous size = G1HeapRegionSize / 2
+G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectorPolicy::decide_on_conc_mark_initiation -> if initiate_conc_mark_if_possible(): set_during_initial_mark_pause(true), set_gcs_are_young(true)
+                                                  -> should_start_conc_mark = during_initial_mark_pause()
+                                                  -> G1CollectorPolicy::record_collection_pause_start -> _last_gc_was_young = false;
+                                                  -> G1CollectorPolicy::finalize_cset -> if !gcs_are_young(): 增加了old region到cset，实现增量copy的mix gc (stw)
+                                                  -> YGC(参考YGC)
+                                                  -> G1CollectorPolicy::record_collection_pause_end -> if during_initial_mark_pause(): set_during_initial_mark_pause(false) else if need_to_start_conc_mark (IHOP): set_initiate_conc_mark_if_possible(true)
+                                                                                                    -> if _last_young_gc and next_gc_should_be_mixed (G1HeapWastePercent): set_gcs_are_young(false)
+                                                  -> should_start_conc_mark -> ConcurrentMarkThread::run
+
+注意set_initiate_conc_mark_if_possible(true)有多个触发点: force_initial_mark_if_outside_cycle、VM_CollectForMetadataAllocation::initiate_concurrent_GC、G1CollectedHeap::attempt_allocation_at_safepoint
+
 YGC: (多个线程各跑各的G1ParTask，根据worker_id分配全局资源)
 G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_collection_set -> G1ParTask::work -> G1RootProcessor::evacuate_roots -> is_task_claimed -> G1ParCopyClosure::do_oop_work
                                                                                                                  -> G1RootProcessor::scan_remembered_sets -> G1RemSet::oops_into_collection_set_do -> G1RemSet::updateRS -> G1CollectedHeap::iterate_dirty_card_closure -> DirtyCardQueueSet::apply_closure_to_completed_buffer
                                                                                                                                                                                                    -> G1RemSet::scanRS -> ScanRSClosure::doHeapRegion -> HeapRegionDCTOC::walk_mem_region
                                                                                                                  -> G1ParEvacuateFollowersClosure::do_void -> G1ParScanThreadState::steal_and_trim_queue -> G1ParScanThreadState::do_oop_evac (same as G1ParCopyClosure::do_oop_work) 整个过程比较耗时需要steal机制负载均衡
-                                                  -> G1CollectedHeap::free_collection_set -> ???
-                                                  -> ...
+                                                  -> G1CollectedHeap::free_collection_set -> 把cset中回收的region释放回free list
+                                                  -> G1CollectedHeap::eagerly_reclaim_humongous_regions -> 回收humongous_regions到free list
+                                                  -> do other clean job ...
 
 G1ParCopyClosure(with barrier or with no barrier)::do_oop_work(会判断oop是否在cset)-> G1ParScanThreadState::copy_to_survivor_space -> G1ParGCAllocator::plab_allocate copy到survivor region的G1ParGCAllocBuffer(PLAB,线程独占,YoungPLABSize) or copy到old region的PLAB(OLdPLABSize)
                                                                                                                                  -> oopDesc::oop_iterate_backwards -> InstanceKlass::oop_oop_iterate_backwards_nv -> G1ParScanClosure::do_oop_nv -> G1ParScanThreadState::push_on_queue
@@ -341,17 +354,17 @@ G1UpdateRSOrPushRefOopClosure::do_oop -> G1ParPushHeapRSClosure::do_oop -> G1Par
 Refine 线程处理 DCQS 中绿区和黄区的DCQ, 白区的DCQ 留给 GC 线程处理(YGC)，而红区的 DCQ 直接在 Mutator 线程中处理。
 
 MIX GC:
-G1CollectedHeap::do_collection_pause_at_safepoint, should_start_conc_mark is true, gcs_are_young is true, G1ParCopyClosure开启G1MarkFromRoot(ConcurrentMark::grayRoot),  一次完整的YGC (stw)
+G1CollectedHeap::do_collection_pause_at_safepoint -> should_start_conc_mark is true, gcs_are_young is true, G1ParCopyClosure开启G1MarkFromRoot(ConcurrentMark::grayRoot),  一次完整的YGC (stw)
 
-record_collection_pause_end，YGC结束后才会判断下一次YGC是否开启mark或者mix gc:
-should_start_conc_mark的触发条件 -> set_initiate_conc_mark_if_possible -> need_to_start_conc_mark -> IHOP
-                                                                      ->  force_initial_mark_if_outside_cycle
-mix gc的触发条件 -> record_concurrent_mark_cleanup_completed -> next_gc_should_be_mixed
+YGC结束后才会判断下一次YGC是否开启conc_mark: record_collection_pause_end -> need_to_start_conc_mark
+conc_mark结束后的再次YGC结束后才会判断下一次GC是否开启mix gc: record_collection_pause_end -> next_gc_should_be_mixed
+注意conc_mark和mix gc不会同时进行
 
 ConcurrentMarkThread::run -> ConcurrentMark::scanRootRegions -> CMRootRegionScanTask::work -> ConcurrentMark::scanRootRegion(survivor regions) -> G1RootRegionScanClosure::do_oop
                           -> ConcurrentMark::markFromRoots() -> CMConcurrentMarkingTask::work -> CMTask::do_marking_step
                           -> CMCheckpointRootsFinalClosure(VM_CGC_Operation) -> ConcurrentMark::checkpointRootsFinal -> CMTask::do_marking_step (has_overflown会导致重新ConcurrentMark)
                           -> CMCleanUp(VM_CGC_Operation) -> ConcurrentMark::cleanup()
+                          -> G1CollectorPolicy::record_concurrent_mark_cleanup_completed: _last_young_gc = true (this is the last ygc before mix gc)
 
 G1RootRegionScanClosure::do_oop -> ConcurrentMark::grayRoot -> ConcurrentMark::par_mark_and_count -> 更新nextMarkBitMap和计算hr内的活跃内存
 
@@ -366,8 +379,6 @@ CMTask::process_grey_object<true> -> oopDesc::oop_iterate -> InstanceKlass::oop_
 
 CMTask::make_reference_grey -> ConcurrentMark::par_mark_and_count
                             -> CMTaskQueue::push
-
-G1CollectedHeap::do_collection_pause_at_safepoint finalize_cset 增加了old region，实现增量copy的mix gc (stw)
 
 FGC:
 G1CollectedHeap::do_full_collection ->
