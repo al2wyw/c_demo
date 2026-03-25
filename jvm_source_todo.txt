@@ -326,9 +326,10 @@ G1:
 Humongous size = G1HeapRegionSize / 2
 G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectorPolicy::decide_on_conc_mark_initiation -> if initiate_conc_mark_if_possible(): set_during_initial_mark_pause(true), set_gcs_are_young(true)
                                                   -> should_start_conc_mark = during_initial_mark_pause()
-                                                  -> G1CollectorPolicy::record_collection_pause_start -> _last_gc_was_young = false;
-                                                  -> G1CollectorPolicy::finalize_cset -> if !gcs_are_young(): 增加了old region到cset，实现增量copy的mix gc (stw)
+                                                  -> G1CollectorPolicy::record_collection_pause_start()
+                                                  -> G1CollectedHeap::calculate_collection_set -> if !gcs_are_young(): 增加了old region到cset，实现增量copy的mix gc (stw)
                                                   -> YGC(参考YGC)
+                                                  -> should_start_conc_mark -> G1ConcurrentMark::post_initial_mark()
                                                   -> G1CollectorPolicy::record_collection_pause_end -> if during_initial_mark_pause(): set_during_initial_mark_pause(false) else if need_to_start_conc_mark (IHOP): set_initiate_conc_mark_if_possible(true)
                                                                                                     -> if _last_young_gc and next_gc_should_be_mixed (G1HeapWastePercent): set_gcs_are_young(false)
                                                   -> should_start_conc_mark -> ConcurrentMarkThread::run
@@ -340,9 +341,9 @@ G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::evacuate_c
                                                                                                                  -> G1RootProcessor::scan_remembered_sets -> G1RemSet::oops_into_collection_set_do -> G1RemSet::updateRS -> G1CollectedHeap::iterate_dirty_card_closure -> DirtyCardQueueSet::apply_closure_to_completed_buffer
                                                                                                                                                                                                    -> G1RemSet::scanRS -> ScanRSClosure::doHeapRegion -> HeapRegionDCTOC::walk_mem_region
                                                                                                                  -> G1ParEvacuateFollowersClosure::do_void -> G1ParScanThreadState::steal_and_trim_queue -> G1ParScanThreadState::do_oop_evac (same as G1ParCopyClosure::do_oop_work) 整个过程比较耗时需要steal机制负载均衡
-                                                  -> G1CollectedHeap::free_collection_set -> 把cset中回收的region释放回free list
-                                                  -> G1CollectedHeap::eagerly_reclaim_humongous_regions -> 回收humongous_regions到free list
-                                                  -> do other clean job ...
+                                                  -> G1CollectedHeap::post_evacuate_collection_set  -> G1CollectedHeap::free_collection_set -> 把cset中回收的region释放回free list
+                                                                                                    -> G1CollectedHeap::eagerly_reclaim_humongous_regions -> 回收humongous_regions到free list
+
 
 G1ParCopyClosure(with barrier or with no barrier)::do_oop_work(会判断oop是否在cset)-> G1ParScanThreadState::copy_to_survivor_space -> G1ParGCAllocator::plab_allocate copy到survivor region的G1ParGCAllocBuffer(PLAB,线程独占,YoungPLABSize) or copy到old region的PLAB(OLdPLABSize)
                                                                                                                                  -> oopDesc::oop_iterate_backwards -> InstanceKlass::oop_oop_iterate_backwards_nv -> G1ParScanClosure::do_oop_nv -> G1ParScanThreadState::push_on_queue
