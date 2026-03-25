@@ -285,7 +285,7 @@ CompactibleSpace::compact
 
 ParallelScavenge: (和以上完全不一样的另一套实现方式)
 
-CMS: (未完成)
+CMS: (未完成,后面版本jdk直接移除了cms,所以ParNew也跟着被移除,ParallelGC是ParallelScavenge)
 CMS free list: FreeList head -> FreeChunk <=> FreeChunk <- tail FreeList
 LinearAllocBlock ???
 AdaptiveFreeList(size < 257) size as index -> free chuck list
