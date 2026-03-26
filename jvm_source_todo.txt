@@ -382,10 +382,18 @@ CMTask::make_reference_grey -> ConcurrentMark::par_mark_and_count
                             -> CMTaskQueue::push
 
 FGC:
-G1CollectedHeap::do_full_collection ->
+G1CollectedHeap::do_full_collection -> G1FullCollector::prepare_collection()
+                                    -> G1FullCollector::collect()   -> phase1_mark_live_objects();
+                                                                    -> phase2_prepare_compaction();
+                                                                    -> phase3_adjust_pointers();
+                                                                    -> phase4_do_compaction();
+                                    -> G1FullCollector::complete_collection()
 
 string去重: +XX:UseStringDeduplication
-G1StringDedup::enqueue_from_mark
+G1StringDedup::enqueue_from_mark(G1FullGCMarker::mark_object) -> enqueue
+G1StringDedup::enqueue_from_evacuation(G1ParScanThreadState::copy_to_survivor_space) -> enqueue
+
+StringDedupThread::do_deduplication -> pop -> StringDedupTable::deduplicate
 
 内存管理的总结:
 碰撞指针 or 空闲链表
