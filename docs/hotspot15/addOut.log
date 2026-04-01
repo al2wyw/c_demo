@@ -1,0 +1,288 @@
+[Verified Entry Point]
+  # {method} {0x00007ff8a86c64b8} &apos;addOut&apos; &apos;(II)I&apos; in &apos;jvm/InlineCompileOptTest&apos;
+  # parm0:    rsi       = int
+  # parm1:    rdx       = int
+  #           [sp+0x30]  (sp of caller)
+ ;; N1: #	out( B1 ) &lt;- in( B19 B21 B7 B22 )  Freq: 1
+ ;; B1: #	out( B17 B2 ) &lt;- BLOCK HEAD IS JUNK  Freq: 1
+  0x00007ff8bcacf720:   mov    %eax,-0x16000(%rsp)
+  0x00007ff8bcacf727:   push   %rbp
+  0x00007ff8bcacf728:   sub    $0x20,%rsp                   ;*synchronization entry
+                                                            ; - jvm.InlineCompileOptTest::addOut@-1 (line 34)
+  0x00007ff8bcacf72c:   mov    %edx,0x4(%rsp)
+  0x00007ff8bcacf730:   mov    %esi,(%rsp)
+  0x00007ff8bcacf733:   mov    0x140(%r15),%r13
+  0x00007ff8bcacf73a:   mov    %r13,%r10
+  0x00007ff8bcacf73d:   add    $0x10,%r10
+  0x00007ff8bcacf741:   cmp    0x150(%r15),%r10
+  0x00007ff8bcacf748:   jae    0x00007ff8bcacf95d           ;*putstatic adder {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@8 (line 34)
+ ;; B2: #	out( B3 ) &lt;- in( B1 )  Freq: 0.9999
+  0x00007ff8bcacf74e:   mov    %r10,0x140(%r15)
+  0x00007ff8bcacf755:   prefetchw 0x100(%r10)
+  0x00007ff8bcacf75d:   movq   $0x1,0x0(%r13)
+  0x00007ff8bcacf765:   movl   $0x85a58,0x8(%r13)           ;   {metadata(&apos;jvm/Adder&apos;)}
+  0x00007ff8bcacf76d:   mov    %r12d,0xc(%r13)              ;*new {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@0 (line 34)
+ ;; B3: #	out( B19 B4 ) &lt;- in( B18 B2 )  Freq: 1
+  0x00007ff8bcacf771:   movabs $0x7191f2910,%rbx            ;   {oop(a &apos;java/lang/Class&apos;{0x00000007191f2910} = &apos;jvm/Adder&apos;)}
+  0x00007ff8bcacf77b:   mov    0x70(%rbx),%ebp              ;*getstatic count {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.Adder::&lt;init&gt;@6 (line 17)
+                                                            ; - jvm.InlineCompileOptTest::addOut@5 (line 34)
+  0x00007ff8bcacf77e:   nop
+  0x00007ff8bcacf77f:   nop
+  0x00007ff8bcacf780:   test   %ebp,%ebp
+  0x00007ff8bcacf782:   je     0x00007ff8bcacf978
+ ;; B4: #	out( B8 B5 ) &lt;- in( B3 )  Freq: 0.999999
+  0x00007ff8bcacf788:   cmpb   $0x0,0x30(%r15)
+  0x00007ff8bcacf78d:   jne    0x00007ff8bcacf861           ;*putstatic adder {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@8 (line 34)
+ ;; B5: #	out( B7 B6 ) &lt;- in( B20 B10 B8 B4 )  Freq: 0.999999
+  0x00007ff8bcacf793:   mov    0x4(%rsp),%eax
+  0x00007ff8bcacf797:   cmp    $0x80000000,%eax
+  0x00007ff8bcacf79c:   jne    0x00007ff8bcacf7a5
+  0x00007ff8bcacf79e:   xor    %edx,%edx
+  0x00007ff8bcacf7a0:   cmp    $0xffffffff,%ebp
+  0x00007ff8bcacf7a3:   je     0x00007ff8bcacf7a8
+  0x00007ff8bcacf7a5:   cltd   
+  0x00007ff8bcacf7a6:   idiv   %ebp
+  0x00007ff8bcacf7a8:   mov    %eax,0xc(%r13)               ;*putfield val {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.Adder::&lt;init&gt;@10 (line 17)
+                                                            ; - jvm.InlineCompileOptTest::addOut@5 (line 34)
+  0x00007ff8bcacf7ac:   mov    (%rsp),%r14d
+  0x00007ff8bcacf7b0:   add    0x4(%rsp),%r14d
+  0x00007ff8bcacf7b5:   push   %r10
+  0x00007ff8bcacf7b7:   cmp    0xee5cac2(%rip),%r12        # 0x00007ff8cb92c280
+                                                            ;   {external_word}
+  0x00007ff8bcacf7be:   je     0x00007ff8bcacf7d8
+ ;; MacroAssembler::encode_heap_oop_not_null2: heap base corrupted?
+  0x00007ff8bcacf7c4:   movabs $0x7ff8cb1f0008,%rdi         ;   {external_word}
+  0x00007ff8bcacf7ce:   and    $0xfffffffffffffff0,%rsp
+  0x00007ff8bcacf7d2:   callq  0x00007ff8ca9141f8           ;   {runtime_call MacroAssembler::debug64(char*, long, long*)}
+  0x00007ff8bcacf7d7:   hlt    
+  0x00007ff8bcacf7d8:   pop    %r10
+  0x00007ff8bcacf7da:   test   %r13,%r13
+  0x00007ff8bcacf7dd:   jne    0x00007ff8bcacf7f7
+ ;; null oop passed to encode_heap_oop_not_null2
+  0x00007ff8bcacf7e3:   movabs $0x7ff8cb1f0048,%rdi         ;   {external_word}
+  0x00007ff8bcacf7ed:   and    $0xfffffffffffffff0,%rsp
+  0x00007ff8bcacf7f1:   callq  0x00007ff8ca9141f8           ;   {runtime_call MacroAssembler::debug64(char*, long, long*)}
+  0x00007ff8bcacf7f6:   hlt    
+  0x00007ff8bcacf7f7:   mov    %r13,%r10
+  0x00007ff8bcacf7fa:   shr    $0x3,%r10
+  0x00007ff8bcacf7fe:   movabs $0x7191f1938,%r11            ;   {oop(a &apos;java/lang/Class&apos;{0x00000007191f1938} = &apos;jvm/InlineCompileOptTest&apos;)}
+  0x00007ff8bcacf808:   mov    %r10d,0x70(%r11)             ;*putstatic adder {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@8 (line 34)
+  0x00007ff8bcacf80c:   dec    %ebp
+  0x00007ff8bcacf80e:   mov    %ebp,0x70(%rbx)              ;*putstatic count {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.Adder::&lt;init&gt;@18 (line 18)
+                                                            ; - jvm.InlineCompileOptTest::addOut@5 (line 34)
+  0x00007ff8bcacf811:   movabs $0x7191f1938,%r10            ;   {oop(a &apos;java/lang/Class&apos;{0x00000007191f1938} = &apos;jvm/InlineCompileOptTest&apos;)}
+  0x00007ff8bcacf81b:   mov    %r13,%r11
+  0x00007ff8bcacf81e:   xor    %r10,%r11
+  0x00007ff8bcacf821:   shr    $0x15,%r11
+  0x00007ff8bcacf825:   test   %r11,%r11
+  0x00007ff8bcacf828:   je     0x00007ff8bcacf849
+ ;; B6: #	out( B11 B7 ) &lt;- in( B5 )  Freq: 0.998999
+  0x00007ff8bcacf82a:   shr    $0x9,%r10
+  0x00007ff8bcacf82e:   movabs $0x7ff8b0149000,%rdi
+  0x00007ff8bcacf838:   add    %r10,%rdi
+  0x00007ff8bcacf83b:   nop
+  0x00007ff8bcacf83c:   nop
+  0x00007ff8bcacf83d:   nop
+  0x00007ff8bcacf83e:   nop
+  0x00007ff8bcacf83f:   nop
+  0x00007ff8bcacf840:   cmpb   $0x8,(%rdi)
+  0x00007ff8bcacf843:   jne    0x00007ff8bcacf8c7           ;*new {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@0 (line 34)
+ ;; B7: #	out( N1 ) &lt;- in( B16 B6 B5 )  Freq: 0.999999
+  0x00007ff8bcacf849:   add    0xc(%r13),%r14d              ;*iadd {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.Adder::add@7 (line 22)
+                                                            ; - jvm.InlineCompileOptTest::addOut@16 (line 35)
+  0x00007ff8bcacf84d:   mov    %r14d,%eax
+  0x00007ff8bcacf850:   add    $0x20,%rsp
+  0x00007ff8bcacf854:   pop    %rbp
+  0x00007ff8bcacf855:   mov    0x128(%r15),%r10
+  0x00007ff8bcacf85c:   test   %eax,(%r10)                  ;   {poll_return}
+  0x00007ff8bcacf85f:   nop
+  0x00007ff8bcacf860:   retq   
+ ;; B8: #	out( B5 B9 ) &lt;- in( B4 )  Freq: 0.000999986
+  0x00007ff8bcacf861:   movabs $0x7191f1938,%r10            ;   {oop(a &apos;java/lang/Class&apos;{0x00000007191f1938} = &apos;jvm/InlineCompileOptTest&apos;)}
+  0x00007ff8bcacf86b:   mov    0x70(%r10),%r11d
+  0x00007ff8bcacf86f:   test   %r11d,%r11d
+  0x00007ff8bcacf872:   je     0x00007ff8bcacf793
+ ;; B9: #	out( B20 B10 ) &lt;- in( B8 )  Freq: 0.000499993
+  0x00007ff8bcacf878:   mov    0x38(%r15),%r10
+  0x00007ff8bcacf87c:   mov    %r11,%rdi
+  0x00007ff8bcacf87f:   push   %r10
+  0x00007ff8bcacf881:   cmp    0xee5c9f8(%rip),%r12        # 0x00007ff8cb92c280
+                                                            ;   {external_word}
+  0x00007ff8bcacf888:   je     0x00007ff8bcacf8a2
+ ;; MacroAssembler::decode_heap_oop: heap base corrupted?
+  0x00007ff8bcacf88e:   movabs $0x7ff8cb1f00b8,%rdi         ;   {external_word}
+  0x00007ff8bcacf898:   and    $0xfffffffffffffff0,%rsp
+  0x00007ff8bcacf89c:   callq  0x00007ff8ca9141f8           ;   {runtime_call MacroAssembler::debug64(char*, long, long*)}
+  0x00007ff8bcacf8a1:   hlt    
+  0x00007ff8bcacf8a2:   pop    %r10
+  0x00007ff8bcacf8a4:   shl    $0x3,%rdi
+  0x00007ff8bcacf8a8:   test   %r10,%r10
+  0x00007ff8bcacf8ab:   je     0x00007ff8bcacf99c
+ ;; B10: #	out( B5 ) &lt;- in( B9 )  Freq: 0.000499493
+  0x00007ff8bcacf8b1:   mov    0x48(%r15),%r11
+  0x00007ff8bcacf8b5:   mov    %rdi,-0x8(%r11,%r10,1)
+  0x00007ff8bcacf8ba:   add    $0xfffffffffffffff8,%r10
+  0x00007ff8bcacf8be:   mov    %r10,0x38(%r15)
+  0x00007ff8bcacf8c2:   jmpq   0x00007ff8bcacf793
+ ;; B11: #	out( B15 B12 ) &lt;- in( B6 )  Freq: 0.000998999
+  0x00007ff8bcacf8c7:   mov    0x78(%r15),%r10
+  0x00007ff8bcacf8cb:   mov    0x68(%r15),%r11
+  0x00007ff8bcacf8cf:   lock addl $0x0,-0x40(%rsp)
+  0x00007ff8bcacf8d5:   cmpb   $0x0,(%rdi)
+  0x00007ff8bcacf8d8:   je     0x00007ff8bcacf90d
+ ;; B12: #	out( B14 B13 ) &lt;- in( B11 )  Freq: 0.0004995
+  0x00007ff8bcacf8da:   mov    %r12b,(%rdi)
+  0x00007ff8bcacf8dd:   nop
+  0x00007ff8bcacf8de:   nop
+  0x00007ff8bcacf8df:   nop
+  0x00007ff8bcacf8e0:   test   %r11,%r11
+  0x00007ff8bcacf8e3:   je     0x00007ff8bcacf8f4
+ ;; B13: #	out( B15 ) &lt;- in( B12 )  Freq: 0.00024975
+  0x00007ff8bcacf8e5:   mov    %rdi,-0x8(%r10,%r11,1)
+  0x00007ff8bcacf8ea:   add    $0xfffffffffffffff8,%r11
+  0x00007ff8bcacf8ee:   mov    %r11,0x68(%r15)
+  0x00007ff8bcacf8f2:   jmp    0x00007ff8bcacf90d
+ ;; B14: #	out( B15 ) &lt;- in( B12 )  Freq: 0.00024975
+  0x00007ff8bcacf8f4:   mov    %r15,%rsi
+  0x00007ff8bcacf8f7:   nop
+  0x00007ff8bcacf8f8:   nop
+  0x00007ff8bcacf8f9:   nop
+  0x00007ff8bcacf8fa:   nop
+  0x00007ff8bcacf8fb:   nop
+  0x00007ff8bcacf8fc:   nop
+  0x00007ff8bcacf8fd:   nop
+  0x00007ff8bcacf8fe:   nop
+  0x00007ff8bcacf8ff:   nop
+  0x00007ff8bcacf900:   movabs $0x7ff8ca421ee8,%r10
+  0x00007ff8bcacf90a:   callq  *%r10                        ;*putstatic adder {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@8 (line 34)
+ ;; B15: #	out( B21 B16 ) &lt;- in( B14 B13 B11 )  Freq: 0.000998999
+  0x00007ff8bcacf90d:   movabs $0x7191f1938,%r10            ;   {oop(a &apos;java/lang/Class&apos;{0x00000007191f1938} = &apos;jvm/InlineCompileOptTest&apos;)}
+  0x00007ff8bcacf917:   mov    0x70(%r10),%r11d             ;*getstatic adder {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@11 (line 35)
+  0x00007ff8bcacf91b:   nop
+  0x00007ff8bcacf91c:   nop
+  0x00007ff8bcacf91d:   nop
+  0x00007ff8bcacf91e:   nop
+  0x00007ff8bcacf91f:   nop
+  0x00007ff8bcacf920:   test   %r11d,%r11d
+  0x00007ff8bcacf923:   je     0x00007ff8bcacf9b2           ;*invokevirtual add {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@16 (line 35)
+ ;; B16: #	out( B7 ) &lt;- in( B15 )  Freq: 0.000998998
+  0x00007ff8bcacf929:   mov    %r11,%r10
+  0x00007ff8bcacf92c:   push   %r10
+  0x00007ff8bcacf92e:   cmp    0xee5c94b(%rip),%r12        # 0x00007ff8cb92c280
+                                                            ;   {external_word}
+  0x00007ff8bcacf935:   je     0x00007ff8bcacf94f
+ ;; MacroAssembler::decode_heap_oop: heap base corrupted?
+  0x00007ff8bcacf93b:   movabs $0x7ff8cb1f00b8,%rdi         ;   {external_word}
+  0x00007ff8bcacf945:   and    $0xfffffffffffffff0,%rsp
+  0x00007ff8bcacf949:   callq  0x00007ff8ca9141f8           ;   {runtime_call MacroAssembler::debug64(char*, long, long*)}
+  0x00007ff8bcacf94e:   hlt    
+  0x00007ff8bcacf94f:   pop    %r10
+  0x00007ff8bcacf951:   shl    $0x3,%r10                    ;*getstatic adder {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@11 (line 35)
+  0x00007ff8bcacf955:   mov    %r10,%r13
+  0x00007ff8bcacf958:   jmpq   0x00007ff8bcacf849
+ ;; B17: #	out( B22 B18 ) &lt;- in( B1 )  Freq: 0.000100017
+  0x00007ff8bcacf95d:   movabs $0x800085a58,%rsi            ;   {metadata(&apos;jvm/Adder&apos;)}
+  0x00007ff8bcacf967:   mov    (%rsp),%ebp
+  0x00007ff8bcacf96a:   nop
+  0x00007ff8bcacf96b:   callq  0x00007ff8b503c5a0           ; ImmutableOopMap {}
+                                                            ;*new {reexecute=0 rethrow=0 return_oop=1}
+                                                            ; - jvm.InlineCompileOptTest::addOut@0 (line 34)
+                                                            ;   {runtime_call _new_instance_Java}
+ ;; B18: #	out( B3 ) &lt;- in( B17 )  Freq: 0.000100015
+  0x00007ff8bcacf970:   mov    %rax,%r13
+  0x00007ff8bcacf973:   jmpq   0x00007ff8bcacf771
+ ;; B19: #	out( N1 ) &lt;- in( B3 )  Freq: 1.01328e-06
+  0x00007ff8bcacf978:   mov    $0xffffff86,%esi
+  0x00007ff8bcacf97d:   mov    0x4(%rsp),%ebp
+  0x00007ff8bcacf981:   nop
+  0x00007ff8bcacf982:   nop
+  0x00007ff8bcacf983:   callq  0x00007ff8b51173c0           ; ImmutableOopMap {}
+                                                            ;*idiv {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.Adder::&lt;init&gt;@9 (line 17)
+                                                            ; - jvm.InlineCompileOptTest::addOut@5 (line 34)
+                                                            ;   {runtime_call UncommonTrapBlob}
+  0x00007ff8bcacf988:   movabs $0x7ff8cb08dfc8,%rdi         ;   {external_word}
+  0x00007ff8bcacf992:   and    $0xfffffffffffffff0,%rsp
+  0x00007ff8bcacf996:   callq  0x00007ff8ca9141f8           ;   {runtime_call MacroAssembler::debug64(char*, long, long*)}
+  0x00007ff8bcacf99b:   hlt    
+ ;; B20: #	out( B5 ) &lt;- in( B9 )  Freq: 4.99987e-07
+  0x00007ff8bcacf99c:   mov    %r15,%rsi
+  0x00007ff8bcacf99f:   nop
+  0x00007ff8bcacf9a0:   movabs $0x7ff8ca421d26,%r10
+  0x00007ff8bcacf9aa:   callq  *%r10                        ;*putstatic adder {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@8 (line 34)
+  0x00007ff8bcacf9ad:   jmpq   0x00007ff8bcacf793
+ ;; B21: #	out( N1 ) &lt;- in( B15 )  Freq: 1.01226e-09
+  0x00007ff8bcacf9b2:   mov    $0xfffffff6,%esi
+  0x00007ff8bcacf9b7:   mov    (%rsp),%ebp
+  0x00007ff8bcacf9ba:   nop
+  0x00007ff8bcacf9bb:   callq  0x00007ff8b51173c0           ; ImmutableOopMap {}
+                                                            ;*invokevirtual add {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@16 (line 35)
+                                                            ;   {runtime_call UncommonTrapBlob}
+  0x00007ff8bcacf9c0:   movabs $0x7ff8cb08dfc8,%rdi         ;   {external_word}
+  0x00007ff8bcacf9ca:   and    $0xfffffffffffffff0,%rsp
+  0x00007ff8bcacf9ce:   callq  0x00007ff8ca9141f8           ;   {runtime_call MacroAssembler::debug64(char*, long, long*)}
+  0x00007ff8bcacf9d3:   hlt                                 ;*new {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@0 (line 34)
+ ;; B22: #	out( N1 ) &lt;- in( B17 )  Freq: 1.00017e-09
+  0x00007ff8bcacf9d4:   mov    %rax,%rsi
+  0x00007ff8bcacf9d7:   add    $0x20,%rsp
+  0x00007ff8bcacf9db:   pop    %rbp
+  0x00007ff8bcacf9dc:   nop
+  0x00007ff8bcacf9dd:   nop
+  0x00007ff8bcacf9de:   nop
+  0x00007ff8bcacf9df:   nop
+  0x00007ff8bcacf9e0:   jmpq   0x00007ff8b51a5c20           ;*getstatic adder {reexecute=0 rethrow=0 return_oop=0}
+                                                            ; - jvm.InlineCompileOptTest::addOut@11 (line 35)
+                                                            ;   {runtime_call _rethrow_Java}
+  0x00007ff8bcacf9e5:   hlt    
+  0x00007ff8bcacf9e6:   hlt    
+  0x00007ff8bcacf9e7:   hlt    
+  0x00007ff8bcacf9e8:   hlt    
+  0x00007ff8bcacf9e9:   hlt    
+  0x00007ff8bcacf9ea:   hlt    
+  0x00007ff8bcacf9eb:   hlt    
+  0x00007ff8bcacf9ec:   hlt    
+  0x00007ff8bcacf9ed:   hlt    
+  0x00007ff8bcacf9ee:   hlt    
+  0x00007ff8bcacf9ef:   hlt    
+  0x00007ff8bcacf9f0:   hlt    
+  0x00007ff8bcacf9f1:   hlt    
+  0x00007ff8bcacf9f2:   hlt    
+  0x00007ff8bcacf9f3:   hlt    
+  0x00007ff8bcacf9f4:   hlt    
+  0x00007ff8bcacf9f5:   hlt    
+  0x00007ff8bcacf9f6:   hlt    
+  0x00007ff8bcacf9f7:   hlt    
+  0x00007ff8bcacf9f8:   hlt    
+  0x00007ff8bcacf9f9:   hlt    
+  0x00007ff8bcacf9fa:   hlt    
+  0x00007ff8bcacf9fb:   hlt    
+  0x00007ff8bcacf9fc:   hlt    
+  0x00007ff8bcacf9fd:   hlt    
+  0x00007ff8bcacf9fe:   hlt    
+  0x00007ff8bcacf9ff:   hlt    
+[Exception Handler]
+  0x00007ff8bcacfa00:   jmpq   0x00007ff8b503bba0           ;   {no_reloc}
+[Deopt Handler Code]
+  0x00007ff8bcacfa05:   callq  0x00007ff8bcacfa0a
+  0x00007ff8bcacfa0a:   subq   $0x5,(%rsp)
+  0x00007ff8bcacfa0f:   jmpq   0x00007ff8b5116ee0           ;   {runtime_call DeoptimizationBlob}
+  0x00007ff8bcacfa14:   hlt    
+  0x00007ff8bcacfa15:   hlt    
+  0x00007ff8bcacfa16:   hlt    
+  0x00007ff8bcacfa17:   hlt    
