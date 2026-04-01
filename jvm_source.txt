@@ -2766,6 +2766,7 @@ entry = SharedRuntime::generate_i2c2i_adapters(&_masm,
 
 第64篇-C1编译器概述
 C1编译器的大概编译流程: 字节码 -> 优化 -> HIR -> 优化 -> LIR -> 机器码
+lirGeneration: profile、 postBarrier 等额外代码的生成逻辑都在这里
 typedef enum {
  _t_compile, // C1编译
     _t_setup, // 1)设置C1编译环境
