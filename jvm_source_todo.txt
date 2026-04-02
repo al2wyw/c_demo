@@ -337,13 +337,15 @@ G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectorPolicy::decide_o
 注意set_initiate_conc_mark_if_possible(true)有多个触发点: force_initial_mark_if_outside_cycle、VM_CollectForMetadataAllocation::initiate_concurrent_GC、G1CollectedHeap::attempt_allocation_at_safepoint
 
 YGC: (多个线程各跑各的G1ParTask，根据worker_id分配全局资源)
-G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::pre_evacuate_collection_set
-                                                  -> G1CollectedHeap::evacuate_initial_collection_set -> G1EvacuateRegionsTask::scan_roots -> G1RootProcessor::evacuate_roots -> is_task_claimed -> G1ParCopyClosure::do_oop_work
+G1CollectedHeap::do_collection_pause_at_safepoint -> G1CollectedHeap::pre_evacuate_collection_set  merge card table and calculate dirty cards
+                                                  -> G1CollectedHeap::evacuate_initial_collection_set -> G1RemSet::merge_heap_roots -> G1MergeHeapRootsTask::work -> ...
+                                                                                                      -> G1EvacuateRegionsTask::scan_roots -> G1RootProcessor::evacuate_roots -> is_task_claimed -> G1ParCopyClosure::do_oop_work
                                                                                                                                            -> G1RemSet::scan_heap_roots -> iterate_dirty_regions_from -> G1ScanHRForRegionClosure::do_heap_region -> G1ScanHRForRegionClosure::scan_memregion -> G1ScanCardClosure::do_oop -> G1ParScanThreadState::push_on_queue or G1RedirtyCardsQueue::enqueue      整个过程(Scan all cards in the non-collection set regions)比较耗时需要steal机制负载均衡
                                                                                                                                            -> G1RemSet::scan_collection_set_regions -> collection_set_iterate_increment_from -> G1ScanCollectionSetRegionClosure::do_heap_region -> G1ScanCollectionSetRegionClosure::scan_opt_rem_set_roots -> G1ScanCardClosure::do_oop           (Scan non-card based (heap) roots(optional cset))
                                                                                                                                                                                                                                                                                                                                              -> G1ScanRSForOptionalClosure::do_oop include G1ScanCardClosure::do_oop
                                                                                                      -> G1EvacuateRegionsTask::evacuate_live_objects -> G1ParEvacuateFollowersClosure::do_void -> G1ParScanThreadState::steal_and_trim_queue -> G1ParScanThreadState::do_oop_evac (same as G1ParCopyClosure::do_oop_work) 整个过程比较耗时需要steal机制负载均衡
-                                                  -> G1CollectedHeap::post_evacuate_collection_set  -> G1CollectedHeap::free_collection_set -> 把cset中回收的region释放回free list
+                                                  -> G1CollectedHeap::post_evacuate_collection_set  -> G1CollectedHeap::redirty_logged_cards -> put redirty queue to the DCQ
+                                                                                                    -> G1CollectedHeap::free_collection_set -> 把cset中回收的region释放回free list
                                                                                                     -> G1CollectedHeap::eagerly_reclaim_humongous_regions -> 回收humongous_regions到free list
 
 
@@ -355,6 +357,8 @@ DirtyCardQueueSet::apply_closure_to_completed_buffer -> DirtyCardQueue::apply_cl
 G1UpdateRSOrPushRefOopClosure::do_oop -> G1ParPushHeapRSClosure::do_oop -> G1ParScanThreadState::push_on_queue
                                    or -> HeapRegionRemSet::add_reference -> OtherRegionsTable::add_reference (采用三种颗粒度的数据结构进行引用关系记录: spare table -> per region Table -> bitmap, 前者满了后转变为后者) per region Table内部也是bitmap，记录引用对象addr距离其heapRegion起始addr的offset/512，bitmap大小为HeapRegionSize / 512
 Refine 线程处理 DCQS 中绿区和黄区的DCQ, 白区的DCQ 留给 GC 线程处理(YGC)，而红区的 DCQ 直接在 Mutator 线程中处理。
+g1_post_barrier -> G1BarrierSetRuntime::write_ref_field_post_entry -> G1DirtyCardQueue::enqueue
+g1_pre_barrier -> G1BarrierSetRuntime::write_ref_field_pre_entry -> SATBMarkQueue::enqueue
 
 MIX GC:
 G1CollectedHeap::do_collection_pause_at_safepoint -> should_start_conc_mark is true, gcs_are_young is true, G1ParCopyClosure开启G1MarkFromRoot(ConcurrentMark::grayRoot),  一次完整的YGC (stw)
