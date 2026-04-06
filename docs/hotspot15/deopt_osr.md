@@ -34,7 +34,7 @@ fetch_unroll_info_helper() → 构建解释器帧
     ▼
 backedge_counter 累加
     │
-    │ 超过阈值
+    │ 超过阈值 (触发 overflow 的条件是 (counter & mask) == 0，即计数器的低位恰好全为 0，这是一个周期性触发，退优化不会更改counter的值)
     ▼
 InterpreterRuntime::frequency_counter_overflow(branch_bcp)
     │
