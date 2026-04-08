@@ -10,7 +10,7 @@
     │
     │ uncommon_trap 触发
     ▼
-uncommon_trap_inner()
+Deoptimization::uncommon_trap_inner()
     ├── 更新 MDO trap 历史（inc_trap_count, set_trap_state）
     ├── 根据 action 决定：
     │     Action_reinterpret → make_not_entrant = true, reprofile = true
