@@ -2416,6 +2416,7 @@ InterpreterRuntime::frequency_counter_overflow_inner(){
     nmethod* osr_nm = cp->event(method, method, branch_bci, bci, CompLevel_none, NULL, thread);
     ...
 }
+注意，OSR编译的代码存储在InstanceKlass中，而整个方法编译的代码存储在Method的_code属性中
 nmethod* SimpleThresholdPolicy::event(){
   if (bci == InvocationEntryBci) {
     // 编译整个方法
