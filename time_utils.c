@@ -6,6 +6,13 @@
 #include <stdio.h>
 #include <time.h>
 
+long long get_timestamp_ns()//获取时间戳函数ns
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return tv.tv_sec * 1000000000 + tv.tv_usec * 1000;
+}
+
 long long get_timestamp_ms()//获取时间戳函数ms
 {
     struct timeval tv;
