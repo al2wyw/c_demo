@@ -179,3 +179,6 @@ do_unroll()
 `clone_loop` 的本质就是 **`node->clone()`**——把循环体中的每个 IR 节点（`AddINode`、`StoreINode` 等）**原样复制一份**，然后修复引用关系。C2 **不会**在复制之后对展开后的多份节点做代数化简（如把 16 个 `AddI` 合并为 `ShlI + AddI`）。
 
 这就是"基于模板"的含义：**复制节点，不做跨副本的代数优化**。后续的 IGVN（Ideal Graph Value Numbering）虽然会做一些化简，但对这种带有 RAW 依赖链的累加模式无能为力。
+
+### 注意
+C2没有做展开后的强度削减（Strength Reduction）
