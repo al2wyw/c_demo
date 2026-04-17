@@ -8,6 +8,20 @@ long long get_timestamp_ns();
 
 const int LOOP = 100000;
 
+// gcc -S strength_reduce.c 后直接改汇编代码
+/*
+x +=  h << 4 的汇编:(比O3快)
+        movl    %r12d, %eax
+        sall    $4, %eax
+        addl    %eax, %ebx
+        addl    $1, %edx
+        cmpl    %r12d, %edx
+gcc -O3:
+        leal    (%rbx,%rbp,8), %ecx
+        addl    $1, %edx
+        cmpl    %r12d, %edx
+        leal    (%rcx,%rbp,8), %ebx
+ */
 int test(register int h, int loop) {
     long long start = get_timestamp_ns();
     register int x = 0x10;
@@ -33,6 +47,7 @@ int test(register int h, int loop) {
     return 0;
 }
 
+//gcc -O3 优化后循环不见了，奇快无比
 int test2(register int h, int loop) {
     long long start = get_timestamp_ns();
     register int x = 0x10;
