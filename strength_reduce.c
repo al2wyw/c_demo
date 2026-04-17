@@ -11,7 +11,7 @@ const int LOOP = 100000;
 // gcc -S strength_reduce.c 后直接改汇编代码
 /*
 x +=  h << 4 的汇编:(比O3快)
-        movl    %r12d, %eax
+        movl    %ebp, %eax
         sall    $4, %eax
         addl    %eax, %ebx
         addl    $1, %edx
@@ -21,6 +21,12 @@ gcc -O3:
         addl    $1, %edx
         cmpl    %r12d, %edx
         leal    (%rcx,%rbp,8), %ebx
+16个add:
+        addl    %ebp, %ebx
+time:
+45000
+71000
+573000
  */
 int test(register int h, int loop) {
     long long start = get_timestamp_ns();
