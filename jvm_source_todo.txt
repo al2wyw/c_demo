@@ -103,14 +103,14 @@ Load1(s); LoadStore; Store2: Loads before Load1 may *not* float below Store2
 Store1(s); StoreLoad; Load2: Stores before Store1 may *not* float below Load2
 
 |     memory accesses      | ^
-|------- release  ---------| |  StoreStore
+|------- release  ---------| |  StoreStore/LoadStore
       memory accesses -------|
 |------- acquire  ---------| |  LoadLoad/LoadStore
 |     memory accesses      | V
 fence = release + acquire       StoreLoad
 load_acquire = acquire + read variable; release_store = release + write variable; store_fence = fence + write variable
 why StoreStore is release and LoadLoad/LoadStore is acquire:(from java并发编程的艺术)
-normal r/w StoreStore volatile w StoreLoad
+normal r/w StoreStore LoadStore volatile w StoreLoad
 volatile r LoadLoad LoadStore normal r/w
 jdk15的StoreStore、LoadLoad、LoadStore、release、acquire全部变成 __asm__ volatile ("" : : : "memory"); (编译器屏障)
 
@@ -414,3 +414,4 @@ Chunk使用碰撞指针进行内存分配
 C2编译入口:
 Compile::Compile
 GraphKit: uncommon trap、postBarrier 等额外代码的生成逻辑都在这里
+PhaseOutput::fill_buffer -> Node::emit -> x86_64.ad
