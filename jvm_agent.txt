@@ -37,6 +37,8 @@ Instrumentation实现(涉及jvmti):
 Btrace、jvm-sandbox、Arthas
 
 二、jvm tool interface agent(jvmti)
+Java Platform Debugger Architecture(JPDA) 使用jvmti
+JPDA包含三个组件: JPDA agent(backend)、JDWP协议、JDI接口(frontend)
 
 
 三、serviceability agent(SA)
