@@ -415,3 +415,9 @@ C2编译入口:
 Compile::Compile
 GraphKit: uncommon trap、postBarrier 等额外代码的生成逻辑都在这里
 PhaseOutput::fill_buffer -> Node::emit -> x86_64.ad
+
+jfr:
+搜should_commit()，到处都有记录event的代码
+
+jvmti:
+JvmtiExport::postxxxx进行callback函数调用
