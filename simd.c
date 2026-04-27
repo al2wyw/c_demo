@@ -9,7 +9,11 @@
 // float b[len] __attribute__((aligned(16)));
 // float res[len] __attribute__((aligned(16)));
 // 2. 不要混用不同位宽的SIMD指令
+// 查看cpu支持的指令集: cat /proc/cpuinfo | grep -o -E 'avx[0-9a-z]*' | sort -u
+// gcc -std=c11 -O2 -mavx -mavx512f simd.c -o simd
+// -mavx : 启用 __m256 及 _mm256_* | -mavx512f : 启用 __m512 及 _mm512_*
 #include <stdio.h>
+#include <stdlib.h>
 #include <xmmintrin.h>
 #include <immintrin.h>
 
@@ -31,6 +35,8 @@ void simd4(float* a, float* b, float* res, int size) {
     }
 }
 
+//可以免去 -mavx
+__attribute__((target("avx")))
 void simd8(float* a, float* b, float* res, int size) {
     for (int i = 0; i < size; i += 8) {
         __m256 A = _mm256_load_ps(a + i);
@@ -41,6 +47,8 @@ void simd8(float* a, float* b, float* res, int size) {
     }
 }
 
+//可以免去 -mavx512f
+__attribute__((target("avx512f")))
 void simd16(float* a, float* b, float* res, int size) {
     for (int i = 0; i < size; i += 16) {
         __m512 A = _mm512_load_ps(a + i);
@@ -58,7 +66,7 @@ void init_data(float* a, float* b, int size) {
     }
 }
 
-void* allaocate(int size, int aligned) {
+void* allocate(int size, int aligned) {
     if (aligned > 0) {
         void* ptr = aligned_alloc(aligned, size);
         printf("aligned: %d, %p\n", aligned, ptr);
@@ -70,9 +78,9 @@ void* allaocate(int size, int aligned) {
 }
 
 void scalar_test(int len, int loop) {
-    float *a = allaocate(sizeof(float) * len, 0);
-    float *b = allaocate(sizeof(float) * len, 0);
-    float *res = allaocate(sizeof(float) * len, 0);
+    float *a = allocate(sizeof(float) * len, 0);
+    float *b = allocate(sizeof(float) * len, 0);
+    float *res = allocate(sizeof(float) * len, 0);
     init_data(a, b, len);
 
     long long start = get_timestamp_ns();
@@ -89,9 +97,9 @@ void scalar_test(int len, int loop) {
 
 void simd4_test(int len, int loop) {
 
-    float *a = allaocate(sizeof(float) * len, 16);
-    float *b = allaocate(sizeof(float) * len, 16);
-    float *res = allaocate(sizeof(float) * len, 16);
+    float *a = allocate(sizeof(float) * len, 16);
+    float *b = allocate(sizeof(float) * len, 16);
+    float *res = allocate(sizeof(float) * len, 16);
 
     init_data(a, b, len);
 
@@ -109,9 +117,9 @@ void simd4_test(int len, int loop) {
 
 void simd8_test(int len, int loop) {
 
-    float *a = allaocate(sizeof(float) * len, 32);
-    float *b = allaocate(sizeof(float) * len, 32);
-    float *res = allaocate(sizeof(float) * len, 32);
+    float *a = allocate(sizeof(float) * len, 32);
+    float *b = allocate(sizeof(float) * len, 32);
+    float *res = allocate(sizeof(float) * len, 32);
 
     init_data(a, b, len);
 
@@ -129,9 +137,9 @@ void simd8_test(int len, int loop) {
 
 void simd16_test(int len, int loop) {
 
-    float *a = allaocate(sizeof(float) * len, 64);
-    float *b = allaocate(sizeof(float) * len, 64);
-    float *res = allaocate(sizeof(float) * len, 64);
+    float *a = allocate(sizeof(float) * len, 64);
+    float *b = allocate(sizeof(float) * len, 64);
+    float *res = allocate(sizeof(float) * len, 64);
 
     init_data(a, b, len);
 
