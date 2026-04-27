@@ -35,7 +35,6 @@ void simd4(float* a, float* b, float* res, int size) {
     }
 }
 
-//可以免去 -mavx
 __attribute__((target("avx")))
 void simd8(float* a, float* b, float* res, int size) {
     for (int i = 0; i < size; i += 8) {
@@ -47,7 +46,6 @@ void simd8(float* a, float* b, float* res, int size) {
     }
 }
 
-//可以免去 -mavx512f
 __attribute__((target("avx512f")))
 void simd16(float* a, float* b, float* res, int size) {
     for (int i = 0; i < size; i += 16) {
