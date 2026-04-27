@@ -10,8 +10,7 @@
 // float res[len] __attribute__((aligned(16)));
 // 2. 不要混用不同位宽的SIMD指令
 // 查看cpu支持的指令集: cat /proc/cpuinfo | grep -o -E 'avx[0-9a-z]*' | sort -u
-// gcc -std=c11 -O2 -mavx -mavx512f simd.c -o simd
-// -mavx : 启用 __m256 及 _mm256_* | -mavx512f : 启用 __m512 及 _mm512_*
+// gcc -mavx -mavx512f simd.c time_utils.c -o simd  | -mavx : 启用 __m256 及 _mm256_* | -mavx512f : 启用 __m512 及 _mm512_*
 #include <stdio.h>
 #include <stdlib.h>
 #include <xmmintrin.h>
@@ -35,7 +34,7 @@ void simd4(float* a, float* b, float* res, int size) {
     }
 }
 
-__attribute__((target("avx")))
+__attribute__((target("avx")))//可以免除 -mavx
 void simd8(float* a, float* b, float* res, int size) {
     for (int i = 0; i < size; i += 8) {
         __m256 A = _mm256_load_ps(a + i);
@@ -46,7 +45,7 @@ void simd8(float* a, float* b, float* res, int size) {
     }
 }
 
-__attribute__((target("avx512f")))
+__attribute__((target("avx512f")))//可以免除 -mavx512f
 void simd16(float* a, float* b, float* res, int size) {
     for (int i = 0; i < size; i += 16) {
         __m512 A = _mm512_load_ps(a + i);
