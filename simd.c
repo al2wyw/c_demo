@@ -167,3 +167,27 @@ int main(int argc, char *argv[]) {
     simd16_test(len, loop);
     return 0;
 }
+
+/*
+./simd 16000 10000
+malloc: 0x7e72a0
+malloc: 0x7f70c0
+malloc: 0x806ad0
+time: 487976000
+0.000000, 2.000000, 6.000000, 12.000000
+aligned: 16, 0x7e72a0
+aligned: 16, 0x7f70c0
+aligned: 16, 0x806ad0
+time: 259044000
+0.000000, 2.000000, 6.000000, 12.000000
+aligned: 32, 0x7f70c0
+aligned: 32, 0x806b20
+aligned: 32, 0x816580
+time: 136140000
+0.000000, 2.000000, 6.000000, 12.000000
+aligned: 64, 0x826000
+aligned: 64, 0x835a80
+aligned: 64, 0x845500
+time: 83778000
+0.000000, 2.000000, 6.000000, 12.000000
+ */
