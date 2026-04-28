@@ -11,14 +11,15 @@ ObjectMonitor  重量级(包含自旋)
 异常机制:
 athrow      explicit_exception
 TemplateInterpreter::_throw_XXXException_entry from bytecode asm    explicit_exception
-StubRoutines::_throw_XXXException_entry from compiled asm    explicit_exception
+asm inst: test/comp jump to call RuntimeStub - throw_XXX_exception  explicit_exception
 asm inst: test/comp jump to call UncommonTrapBlob      explicit_exception
 asm inst: memory deref/div SIGSEGV SIGFPE (这里用到了信号机制)      implicit_exception
+StubRoutines::_throw_XXXException_entry from compiled asm    implicit_exception
 
 解释执行:
 athrow => jump _throw_exception_entry
-xxx exception handler(TemplateInterpreter::_throw_XXXException_entry) => generate_exception_handler => create_exception, jump _throw_exception_entry
-xxx exception handler(TemplateInterpreter::_throw_XXXException_entry) => generate_XXXException_handler => throw_XXXException
+intrycatch: xxx exception handler(TemplateInterpreter::_throw_XXXException_entry) => generate_exception_handler => create_exception, jump _throw_exception_entry
+notrycatch: xxx exception handler(TemplateInterpreter::_throw_XXXException_entry) => generate_XXXException_handler => throw_XXXException
 InterpreterRuntime::create_exception => thread->set_vm_result
 InterpreterRuntime::throw_XXXException => THROW => thread->set_pending_exception (call_VM_base check pending exception and jump forward_exception_entry)
 TemplateInterpreter::_throw_exception_entry => jump return of InterpreterRuntime::exception_handler_for_exception => the bci address of exception handler table in current java method or
@@ -27,8 +28,8 @@ StubRoutines::forward_exception_entry => jump return of exception_handler_for_re
 InterpreterRuntime::throw_pending_exception do nothing
 
 编译执行:
-C1 athrow => jmp RuntimeStub - unwind_exception Runtime1 stub(Runtime1::generate_unwind_exception) => exception_handler_for_return_address
-C1 athrow => call RuntimeStub - handle_exception_nofpu Runtime1 stub(Runtime1::generate_handle_exception 有多种不同的 handle_exception)
+notrycatch: C1 athrow => jmp RuntimeStub - unwind_exception Runtime1 stub(Runtime1::generate_unwind_exception) => exception_handler_for_return_address
+intrycatch: C1 athrow => call RuntimeStub - handle_exception_nofpu Runtime1 stub(Runtime1::generate_handle_exception 有多种不同的 handle_exception)
 C1 implicit exception dispatches to call stub addr
 C2 null check implicit exception call UncommonTrapBlob
 C2 test check explicit exception call UncommonTrapBlob
