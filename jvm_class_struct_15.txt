@@ -1,0 +1,646 @@
+b LinkResolver::linktime_resolve_virtual_method
+
+type = class ThreadShadow : public CHeapObj<(MemoryType)2> {
+                         protected:
+/*    8      |     8 */    oop _pending_exception;
+/*   16      |     8 */    const char *_exception_file;
+/*   24      |     4 */    int _exception_line;
+/* XXX  4-byte padding  */
+
+                           /* total size (bytes):   32 */
+                         } *
+type = class Thread : public ThreadShadow {
+                         private:
+                           static Thread *_thr_current;
+/*   32      |   152 */    GCThreadLocalData _gc_data;
+                         protected:
+                           static Thread *_starting_thread;
+/*  184      |     8 */    void *_real_malloc_address;
+/*  192      |     8 */    ThreadsList * volatile _threads_hazard_ptr;
+/*  200      |     8 */    SafeThreadsListPtr *_threads_list_ptr;
+/*  208      |     4 */    uint _nested_threads_hazard_ptr_cnt;
+                         private:
+/* XXX  4-byte hole  */
+/*  216      |     8 */    Monitor *_SR_lock;
+                         protected:
+/*  224      |     4 */    volatile uint32_t _suspend_flags;
+                         private:
+/*  228      |     4 */    int _num_nested_signal;
+/*  232      |     1 */    bool _suspendible_thread;
+/* XXX  7-byte hole  */
+/*  240      |     8 */    JNIHandleBlock *_active_handles;
+/*  248      |     8 */    JNIHandleBlock *_free_handle_block;
+/*  256      |     8 */    HandleMark *_last_handle_mark;
+/*  264      |     8 */    uintx _threads_do_token;
+/*  272      |     8 */    volatile uintx _rcu_counter;
+/*  280      |     8 */    ICRefillVerifier *_missed_ic_stub_refill_verifier;
+/*  288      |     4 */    int _no_safepoint_count;
+/*  292      |     1 */    bool _skip_gcalot;
+/* XXX  3-byte hole  */
+/*  296      |     8 */    volatile void *_polling_page;
+/*  304      |   144 */    class ThreadLocalAllocBuffer : public CHeapObj<(MemoryType)2> {
+                             private:
+/*  312      |     8 */        HeapWord *_start;
+/*  320      |     8 */        HeapWord *_top;
+/*  328      |     8 */        HeapWord *_pf_top;
+/*  336      |     8 */        HeapWord *_end;
+/*  344      |     8 */        HeapWord *_allocation_end;
+/*  352      |     8 */        size_t _desired_size;
+/*  360      |     8 */        size_t _refill_waste_limit;
+/*  368      |     8 */        size_t _allocated_before_last_gc;
+/*  376      |     8 */        size_t _bytes_since_last_sample_point;
+                               static size_t _max_size;
+                               static int _reserve_for_allocation_prefetch;
+                               static unsigned int _target_refills;
+/*  384      |     4 */        unsigned int _number_of_refills;
+/*  388      |     4 */        unsigned int _fast_refill_waste;
+/*  392      |     4 */        unsigned int _slow_refill_waste;
+/*  396      |     4 */        unsigned int _gc_waste;
+/*  400      |     4 */        unsigned int _slow_allocations;
+/* XXX  4-byte hole  */
+/*  408      |     8 */        size_t _allocated_size;
+/*  416      |    32 */        class AdaptiveWeightedAverage : public CHeapObj<(MemoryType)5> {
+                                 private:
+/*  424      |     4 */            float _average;
+/*  428      |     4 */            unsigned int _sample_count;
+/*  432      |     4 */            unsigned int _weight;
+/*  436      |     1 */            bool _is_old;
+                                   static const unsigned int OLD_THRESHOLD;
+                                 protected:
+/* XXX  3-byte hole  */
+/*  440      |     4 */            float _last_sample;
+/* XXX  4-byte padding  */
+
+                                   /* total size (bytes):   32 */
+                               } _allocation_fraction;
+
+                               /* total size (bytes):  144 */
+                           } _tlab;
+/*  448      |     8 */    jlong _allocated_bytes;
+/*  456      |     8 */    class ThreadHeapSampler {
+                             private:
+                               static const int FastLogNumBits;
+                               static const int FastLogMask;
+/*  456      |     8 */        size_t _bytes_until_sample;
+                               static uint64_t _rnd;
+                               static bool _log_table_initialized;
+                               static double _log_table[1024];
+                               static volatile int _sampling_interval;
+
+                               /* total size (bytes):    8 */
+                           } _heap_sampler;
+/*  464      |    16 */    class ThreadStatisticalInfo {
+                             private:
+/*  464      |     8 */        const uint64_t _start_time_stamp;
+/*  472      |     8 */        uint64_t _define_class_count;
+                               /* total size (bytes):   16 */
+                           } _statistical_info;
+/*  480      |   136 */    class JfrThreadLocal {
+                             private:
+/*  480      |     8 */        jobject _java_event_writer;
+/*  488      |     8 */        JfrBuffer *_java_buffer;
+/*  496      |     8 */        JfrBuffer *_native_buffer;
+/*  504      |     8 */        JfrBuffer *_shelved_buffer;
+/*  512      |     8 */        JfrBuffer *_load_barrier_buffer_epoch_0;
+/*  520      |     8 */        JfrBuffer *_load_barrier_buffer_epoch_1;
+/*  528      |     8 */        JfrStackFrame *_stackframes;
+/*  536      |     8 */        traceid _trace_id;
+/*  544      |     8 */        JfrBlobHandle _thread;
+/*  552      |     8 */        u8 _data_lost;
+/*  560      |     8 */        traceid _stack_trace_id;
+/*  568      |     8 */        jlong _user_time;
+/*  576      |     8 */        jlong _cpu_time;
+/*  584      |     8 */        jlong _wallclock_time;
+/*  592      |     4 */        unsigned int _stack_trace_hash;
+/*  596      |     4 */        u4 _stackdepth;
+/*  600      |     4 */        volatile jint _entering_suspend_flag;
+/*  604      |     1 */        bool _excluded;
+/*  605      |     1 */        bool _dead;
+/* XXX  2-byte hole  */
+/*  608      |     8 */        traceid _parent_trace_id;
+
+                               /* total size (bytes):  136 */
+                           } _jfr_thread_local;
+/*  616      |     4 */    int _vm_operation_started_count;
+/*  620      |     4 */    int _vm_operation_completed_count;
+/*  624      |     8 */    ObjectMonitor *_current_pending_monitor;
+/*  632      |     1 */    bool _current_pending_monitor_is_from_java;
+/* XXX  7-byte hole  */
+/*  640      |     8 */    JvmtiRawMonitor *_current_pending_raw_monitor;
+/*  648      |     8 */    ObjectMonitor *_current_waiting_monitor;
+                         public:
+/*  656      |     8 */    ObjectMonitor *om_free_list;
+/*  664      |     4 */    int om_free_count;
+/*  668      |     4 */    int om_free_provision;
+/*  672      |     8 */    ObjectMonitor *om_in_use_list;
+/*  680      |     4 */    int om_in_use_count;
+                         private:
+/* XXX  4-byte hole  */
+/*  688      |     8 */    volatile uint64_t _visited_for_critical_count;
+                         protected:
+/*  696      |     4 */    Thread::RunState _run_state;
+                         private:
+/* XXX  4-byte hole  */
+/*  704      |     8 */    void *_unhandled_oops;
+                         protected:
+/*  712      |     8 */    OSThread *_osthread;
+/*  720      |     8 */    ResourceArea *_resource_area;
+/*  728      |     8 */    ResourceMark *_current_resource_mark;
+/*  736      |     8 */    HandleArea *_handle_area;
+/*  744      |     8 */    GrowableArray<Metadata*> *_metadata_handles;
+/*  752      |     8 */    address _stack_base;
+/*  760      |     8 */    size_t _stack_size;
+/*  768      |     4 */    int _lgrp_id;
+                         private:
+/* XXX  4-byte hole  */
+/*  776      |     8 */    Mutex *_owned_locks;
+/*  784      |     4 */    volatile int _jvmti_env_iteration_count;
+                         public:
+/* XXX  4-byte hole  */
+/*  792      |     8 */    volatile intptr_t _Stalled;
+/*  800      |     4 */    volatile int _TypeTag;
+/* XXX  4-byte hole  */
+/*  808      |     8 */    ParkEvent *_ParkEvent;
+/*  816      |     8 */    ParkEvent *_MuxEvent;
+/*  824      |     4 */    int NativeSyncRecursion;
+/*  828      |     4 */    volatile int _OnTrap;
+/*  832      |     4 */    jint _hashStateW;
+/*  836      |     4 */    jint _hashStateX;
+/*  840      |     4 */    jint _hashStateY;
+/*  844      |     4 */    jint _hashStateZ;
+
+                            /* total size (bytes):  848 */
+                        } *
+
+type = class JavaThread : public Thread {
+                         private:
+/*  848      |     1 */    bool _on_thread_list;
+/* XXX  7-byte hole  */
+/*  856      |     8 */    oop _threadObj;
+/*  864      |     4 */    int _java_call_counter;
+/* XXX  4-byte hole  */
+/*  872      |    24 */    class JavaFrameAnchor {
+                             private:
+/*  872      |     8 */        intptr_t * volatile _last_Java_sp;
+/*  880      |     8 */        volatile address _last_Java_pc;
+/*  888      |     8 */        intptr_t * volatile _last_Java_fp;
+
+                               /* total size (bytes):   24 */
+                           } _anchor;
+/*  896      |     8 */    ThreadFunction _entry_point;
+/*  904      |     8 */    JNIEnv _jni_environment;
+/*  912      |     8 */    DeoptResourceMark *_deopt_mark;
+/*  920      |     8 */    CompiledMethod *_deopt_nmethod;
+/*  928      |     8 */    vframeArray *_vframe_array_head;
+/*  936      |     8 */    vframeArray *_vframe_array_last;
+/*  944      |     8 */    GrowableArray<jvmtiDeferredLocalVariableSet*> *_deferred_locals_updates;
+/*  952      |     8 */    Method *_callee_target;
+/*  960      |     8 */    oop _vm_result;
+/*  968      |     8 */    Metadata *_vm_result_2;
+/*  976      |    16 */    class MemRegion {
+                             private:
+/*  976      |     8 */        HeapWord *_start;
+/*  984      |     8 */        size_t _word_size;
+
+                               /* total size (bytes):   16 */
+                           } _deferred_card_mark;
+/*  992      |     8 */    MonitorChunk *_monitor_chunks;
+/* 1000      |     4 */    JavaThread::AsyncRequests _special_runtime_exit_condition;
+/* XXX  4-byte hole  */
+/* 1008      |     8 */    oop _pending_async_exception;
+                         public:
+/* 1016      |     4 */    volatile JavaThreadState _thread_state;
+                         private:
+/* XXX  4-byte hole  */
+/* 1024      |     8 */    ThreadSafepointState *_safepoint_state;
+/* 1032      |     8 */    address _saved_exception_pc;
+/* 1040      |     4 */    volatile JavaThread::TerminatedTypes _terminated;
+/* 1044      |     1 */    volatile bool _suspend_equivalent;
+/* XXX  3-byte hole  */
+/* 1048      |     4 */    jint _in_deopt_handler;
+/* 1052      |     1 */    volatile bool _doing_unsafe_access;
+/* 1053      |     1 */    bool _do_not_unlock_if_synchronized;
+/* XXX  2-byte hole  */
+/* 1056      |     4 */    volatile JavaThread::JNIAttachStates _jni_attach_state;
+/* 1060      |     4 */    int _pending_deoptimization;
+/* 1064      |     1 */    bool _pending_monitorenter;
+/* 1065      |     1 */    bool _pending_transfer_to_interpreter;
+/* 1066      |     1 */    bool _in_retryable_allocation;
+/* XXX  5-byte hole  */
+/* 1072      |     8 */    jlong _pending_failed_speculation;
+/* 1080      |     8 */    union {
+/*                 8 */        address _implicit_exception_pc;
+/*                 8 */        address _alternate_call_target;
+
+                               /* total size (bytes):    8 */
+                           } _jvmci;
+/* 1088      |     8 */    jlong *_jvmci_counters;
+                         public:
+                           static jlong *_jvmci_old_thread_counters;
+                         private:
+/* 1096      |     4 */    JavaThread::StackGuardState _stack_guard_state;
+/* XXX  4-byte hole  */
+/* 1104      |     8 */    address _stack_overflow_limit;
+/* 1112      |     8 */    address _reserved_stack_activation;
+/* 1120      |     8 */    volatile oop _exception_oop;
+/* 1128      |     8 */    volatile address _exception_pc;
+/* 1136      |     8 */    volatile address _exception_handler_pc;
+/* 1144      |     4 */    volatile int _is_method_handle_return;
+/* 1148      |     4 */    jint _jni_active_critical;
+/* 1152      |     8 */    char *_pending_jni_exception_check_fn;
+/* 1160      |     4 */    int _depth_first_number;
+/* 1164      |     4 */    int _popframe_condition;
+/* 1168      |     4 */    int _frames_to_pop_failed_realloc;
+/* XXX  4-byte hole  */
+/* 1176      |   136 */    class HandshakeState {
+                             private:
+/* 1176      |     8 */        JavaThread *_handshakee;
+/* 1184      |     8 */        HandshakeOperation * volatile _operation;
+/* 1192      |     8 */        HandshakeOperation * volatile _operation_direct;
+/* 1200      |    48 */        class Semaphore : public CHeapObj<(MemoryType)21> {
+                                 private:
+/* 1208      |    40 */            SemaphoreImpl _impl;
+
+                                   /* total size (bytes):   48 */
+                               } _handshake_turn_sem;
+/* 1248      |    48 */        class Semaphore : public CHeapObj<(MemoryType)21> {
+                                 private:
+/* 1256      |    40 */            SemaphoreImpl _impl;
+
+                                   /* total size (bytes):   48 */
+                               } _processing_sem;
+/* 1296      |     1 */        bool _thread_in_process_handshake;
+                             public:
+/* XXX  7-byte hole  */
+/* 1304      |     8 */        Thread *_active_handshaker;
+
+                               /* total size (bytes):  136 */
+                           } _handshake;
+                           static size_t _stack_red_zone_size;
+                           static size_t _stack_yellow_zone_size;
+                           static size_t _stack_reserved_zone_size;
+                           static size_t _stack_shadow_zone_size;
+/* 1312      |     8 */    GrowableArray<oopDesc*> *_array_for_gc;
+/* 1320      |     8 */    void *_popframe_preserved_args;
+/* 1328      |     4 */    int _popframe_preserved_args_size;
+/* XXX  4-byte hole  */
+/* 1336      |     8 */    JvmtiThreadState *_jvmti_thread_state;
+/* 1344      |     4 */    int _interp_only_mode;
+/* 1348      |     4 */    int _should_post_on_exceptions_flag;
+/* 1352      |     8 */    ThreadStatistics *_thread_stat;
+                           static size_t _stack_size_at_create;
+/* 1360      |     8 */    Parker *_parker;
+/* 1368      |     8 */    GrowableArray<MonitorInfo*> *_cached_monitor_info;
+/* 1376      |     8 */    InstanceKlass *_class_to_be_initialized;
+/* 1384      |     8 */    ParkEvent *_SleepEvent;
+
+                           /* total size (bytes): 1392 */
+                         } *
+
+(gdb) p/x thread->exception_oop_offset()
+$4 = {_size = 0x460}
+(gdb) p/x thread->tlab_start_offset()
+$5 = {_size = 0x138}
+(gdb) p/x thread->tlab_end_offset()
+$6 = {_size = 0x150}
+(gdb) p/x thread->tlab_top_offset()
+$7 = {_size = 0x140}
+(gdb) p/x thread->pending_exception_offset()
+$8 = {_size = 0x8}
+(gdb) p/x thread->last_Java_sp_offset()
+$9 = {_size = 0x368}
+(gdb) p/x thread->last_Java_pc_offset()
+$10 = {_size = 0x370}
+(gdb) p/x thread->vm_result_offset()
+$11 = {_size = 0x3c0}
+(gdb) p/x thread->vm_result_2_offset()
+$12 = {_size = 0x3c8}
+
+
+type = class Klass : public Metadata {
+                         protected:
+/*   12      |     4 */    jint _layout_helper;
+/*   16      |     4 */    const KlassID _id;
+/*   20      |     4 */    int _vtable_len;
+/*   24      |     4 */    juint _super_check_offset;
+/* XXX  4-byte hole  */
+/*   32      |     8 */    Symbol *_name;
+/*   40      |     8 */    Klass *_secondary_super_cache;
+/*   48      |     8 */    Array<Klass*> *_secondary_supers;
+/*   56      |    64 */    Klass *_primary_supers[8];
+/*  120      |     8 */    class OopHandle {
+                             private:
+/*  120      |     8 */        oop *_obj;
+
+                               /* total size (bytes):    8 */
+                           } _java_mirror;
+/*  128      |     8 */    Klass *_super;
+/*  136      |     8 */    Klass * volatile _subklass;
+/*  144      |     8 */    Klass * volatile _next_sibling;
+/*  152      |     8 */    Klass *_next_link;
+/*  160      |     8 */    ClassLoaderData *_class_loader_data;
+/*  168      |     4 */    jint _modifier_flags;
+/*  172      |     4 */    class AccessFlags {
+                             private:
+/*  172      |     4 */        jint _flags;
+
+                               /* total size (bytes):    4 */
+                           } _access_flags;
+/*  176      |     8 */    traceid _trace_id;
+/*  184      |     8 */    jlong _last_biased_lock_bulk_revocation_time;
+/*  192      |     8 */    class markWord {
+                             private:
+/*  192      |     8 */        uintptr_t _value;
+                             public:
+                               static const int age_bits;
+                               static const int lock_bits;
+                               static const int biased_lock_bits;
+                               static const int max_hash_bits;
+                               static const int hash_bits;
+                               static const int unused_gap_bits;
+                               static const int epoch_bits;
+                               static const int lock_shift;
+                               static const int biased_lock_shift;
+                               static const int age_shift;
+                               static const int unused_gap_shift;
+                               static const int hash_shift;
+                               static const int epoch_shift;
+                               static const uintptr_t lock_mask;
+                               static const uintptr_t lock_mask_in_place;
+                               static const uintptr_t biased_lock_mask;
+                               static const uintptr_t biased_lock_mask_in_place;
+                               static const uintptr_t biased_lock_bit_in_place;
+                               static const uintptr_t age_mask;
+                               static const uintptr_t age_mask_in_place;
+                               static const uintptr_t epoch_mask;
+                               static const uintptr_t epoch_mask_in_place;
+                               static const uintptr_t hash_mask;
+                               static const uintptr_t hash_mask_in_place;
+                               static const size_t biased_lock_alignment;
+                               static const uintptr_t locked_value;
+                               static const uintptr_t unlocked_value;
+                               static const uintptr_t monitor_value;
+                               static const uintptr_t marked_value;
+                               static const uintptr_t biased_lock_pattern;
+                               static const uintptr_t no_hash;
+                               static const uintptr_t no_hash_in_place;
+                               static const uintptr_t no_lock_in_place;
+                               static const uint max_age;
+                               static const int max_bias_epoch;
+
+                               /* total size (bytes):    8 */
+                           } _prototype_header;
+/*  200      |     4 */    jint _biased_lock_revocation_count;
+                         private:
+/*  204      |     2 */    jshort _shared_class_path_index;
+/*  206      |     2 */    u2 _shared_class_flags;
+/*  208      |     4 */    narrowOop _archived_mirror;
+                         public:
+                           static const int _lh_neutral_value;
+                           static const int _lh_instance_slow_path_bit;
+                           static const int _lh_log2_element_size_shift;
+                           static const int _lh_log2_element_size_mask;
+                           static const int _lh_element_type_shift;
+                           static const int _lh_element_type_mask;
+                           static const int _lh_header_size_shift;
+                           static const int _lh_header_size_mask;
+                           static const int _lh_array_tag_bits;
+                           static const int _lh_array_tag_shift;
+                           static const int _lh_array_tag_obj_value;
+                           static const unsigned int _lh_array_tag_type_value;
+/* XXX  4-byte padding  */
+
+                           /* total size (bytes):  216 */
+                         } *
+
+type = class InstanceKlass : public Klass {
+                         public:
+                           static const KlassID ID;
+                         protected:
+/*  216      |     8 */    Annotations *_annotations;
+/*  224      |     8 */    PackageEntry *_package_entry;
+/*  232      |     8 */    ObjArrayKlass * volatile _array_klasses;
+/*  240      |     8 */    ConstantPool *_constants;
+/*  248      |     8 */    Array<unsigned short> *_inner_classes;
+/*  256      |     8 */    Array<unsigned short> *_nest_members;
+/*  264      |     8 */    InstanceKlass *_nest_host;
+/*  272      |     8 */    Array<unsigned short> *_permitted_subclasses;
+/*  280      |     8 */    Array<RecordComponent*> *_record_components;
+/*  288      |     8 */    const char *_source_debug_extension;
+/*  296      |     4 */    int _nonstatic_field_size;
+/*  300      |     4 */    int _static_field_size;
+/*  304      |     4 */    int _nonstatic_oop_map_size;
+/*  308      |     4 */    int _itable_len;
+/*  312      |     2 */    u2 _nest_host_index;
+/*  314      |     2 */    u2 _this_class_index;
+/*  316      |     2 */    u2 _static_oop_field_count;
+/*  318      |     2 */    u2 _java_fields_count;
+/*  320      |     2 */    volatile u2 _idnum_allocated_count;
+/*  322      |     1 */    bool _is_marked_dependent;
+/*  323      |     1 */    u1 _init_state;
+                           static const unsigned int _kind_other;
+                           static const unsigned int _kind_reference;
+                           static const unsigned int _kind_class_loader;
+                           static const unsigned int _kind_mirror;
+/*  324      |     1 */    u1 _reference_type;
+/*  325      |     1 */    u1 _kind;
+/*  326      |     2 */    u2 _misc_flags;
+/*  328      |     8 */    Thread *_init_thread;
+/*  336      |     8 */    OopMapCache * volatile _oop_map_cache;
+/*  344      |     8 */    JNIid *_jni_ids;
+/*  352      |     8 */    jmethodID * volatile _methods_jmethod_ids;
+/*  360      |     8 */    nmethodBucket * volatile _dep_context;
+/*  368      |     8 */    volatile uint64_t _dep_context_last_cleaned;
+/*  376      |     8 */    nmethod *_osr_nmethods_head;
+/*  384      |     8 */    BreakpointInfo *_breakpoints;
+/*  392      |     8 */    InstanceKlass *_previous_versions;
+/*  400      |     8 */    JvmtiCachedClassFileData *_cached_class_file;
+/*  408      |     8 */    JvmtiCachedClassFieldMap *_jvmti_cached_class_field_map;
+/*  416      |     4 */    int _verify_count;
+/* XXX  4-byte hole  */
+/*  424      |     8 */    Array<Method*> *_methods;
+/*  432      |     8 */    Array<Method*> *_default_methods;
+/*  440      |     8 */    Array<InstanceKlass*> *_local_interfaces;
+/*  448      |     8 */    Array<InstanceKlass*> *_transitive_interfaces;
+/*  456      |     8 */    Array<int> *_method_ordering;
+/*  464      |     8 */    Array<int> *_default_vtable_indices;
+/*  472      |     8 */    Array<unsigned short> *_fields;
+                           static bool _disable_method_binary_search;
+                         private:
+                           static bool _has_previous_versions;
+
+                           /* total size (bytes):  480 */
+                         } *
+
+(gdb) p/x resolved_klass->java_mirror_offset()
+$1 = {_size = 0x78}
+(gdb) p/x resolved_klass->prototype_header_offset()
+$2 = {_size = 0xc0}
+
+type = class Method : public Metadata {
+                         private:
+/*   16      |     8 */    ConstMethod *_constMethod;
+/*   24      |     8 */    MethodData *_method_data;
+/*   32      |     8 */    MethodCounters *_method_counters;
+/*   40      |     4 */    class AccessFlags {
+                             private:
+/*   40      |     4 */        jint _flags;
+
+                               /* total size (bytes):    4 */
+                           } _access_flags;
+/*   44      |     4 */    int _vtable_index;
+/*   48      |     2 */    u2 _intrinsic_id;
+/*   50      |     2 */    u2 _flags;
+/*   52      |     2 */    class JfrTraceFlag {
+                             private:
+/*   52      |     2 */        jshort _flags;
+
+                               /* total size (bytes):    2 */
+                           } _trace_flags;
+/* XXX  2-byte hole  */
+/*   56      |     4 */    int _compiled_invocation_count;
+/* XXX  4-byte hole  */
+/*   64      |     8 */    address _i2i_entry;
+/*   72      |     8 */    volatile address _from_compiled_entry;
+/*   80      |     8 */    CompiledMethod * volatile _code;
+/*   88      |     8 */    volatile address _from_interpreted_entry;
+/*   96      |     8 */    CompiledMethod *_aot_code;
+
+                           /* total size (bytes):  104 */
+                         } *
+
+type = class MethodData : public Metadata {
+                         private:
+/*   16      |     8 */    Method *_method;
+/*   24      |     4 */    int _size;
+/*   28      |     4 */    int _hint_di;
+/*   32      |   208 */    class Mutex : public CHeapObj<(MemoryType)21> {
+                             protected:
+/*   40      |     8 */        Thread * volatile _owner;
+/*   48      |    96 */        class os::PlatformMonitor : public os::PlatformMutex {
+                                 private:
+/* XXX 32-byte hole  */
+/*   96      |    48 */            pthread_cond_t _cond;
+
+                                   /* total size (bytes):   96 */
+                               } _lock;
+/*  144      |    64 */        char _name[64];
+/*  208      |     1 */        bool _allow_vm_block;
+/* XXX  3-byte hole  */
+/*  212      |     4 */        int _rank;
+/*  216      |     8 */        Mutex *_next;
+/*  224      |     8 */        Thread *_last_owner;
+                             public:
+/*  232      |     4 */        Mutex::SafepointCheckRequired _safepoint_check_required;
+/* XXX  4-byte padding  */
+
+                               /* total size (bytes):  208 */
+                           } _extra_data_lock;
+/*  240      |     4 */    uint _nof_decompiles;
+/*  244      |     4 */    uint _nof_overflow_recompiles;
+/*  248      |     4 */    uint _nof_overflow_traps;
+/* XXX  4-byte hole  */
+/*  256      |    64 */    union {
+/*                 8 */        intptr_t _align;
+/*                60 */        u1 _array[60];
+
+                               /* total size (bytes):   64 */
+                           } _trap_hist;
+/*  320      |     8 */    intx _eflags;
+/*  328      |     8 */    intx _arg_local;
+/*  336      |     8 */    intx _arg_stack;
+/*  344      |     8 */    intx _arg_returned;
+/*  352      |     4 */    int _creation_mileage;
+/*  356      |     4 */    class InvocationCounter {
+                             private:
+/*  356      |     4 */        uint _counter;
+
+                               /* total size (bytes):    4 */
+                           } _invocation_counter;
+/*  360      |     4 */    class InvocationCounter {
+                             private:
+/*  360      |     4 */        uint _counter;
+
+                               /* total size (bytes):    4 */
+                           } _backedge_counter;
+/*  364      |     4 */    int _invocation_counter_start;
+/*  368      |     4 */    int _backedge_counter_start;
+/*  372      |     4 */    uint _tenure_traps;
+/*  376      |     4 */    int _invoke_mask;
+/*  380      |     4 */    int _backedge_mask;
+/*  384      |     4 */    int _rtm_state;
+/*  388      |     2 */    short _num_loops;
+/*  390      |     2 */    short _num_blocks;
+/*  392      |     4 */    MethodData::WouldProfile _would_profile;
+/*  396      |     4 */    int _jvmci_ir_size;
+/*  400      |     8 */    FailedSpeculation *_failed_speculations;
+/*  408      |     4 */    int _data_size;
+/*  412      |     4 */    int _parameters_type_data_di;
+/*  416      |     8 */    intptr_t _data[1];
+
+                           /* total size (bytes):  424 */
+                         } *
+
+type = class ConstMethod : public MetaspaceObj {
+                         private:
+/*    0      |     8 */    volatile uint64_t _fingerprint;
+/*    8      |     8 */    ConstantPool *_constants;
+/*   16      |     8 */    Array<unsigned char> *_stackmap_data;
+/*   24      |     8 */    union {
+/*                 8 */        AdapterHandlerEntry *_adapter;
+/*                 8 */        AdapterHandlerEntry **_adapter_trampoline;
+
+                               /* total size (bytes):    8 */
+                           };
+/*   32      |     4 */    int _constMethod_size;
+/*   36      |     2 */    u2 _flags;
+/*   38      |     1 */    u1 _result_type;
+/* XXX  1-byte hole  */
+/*   40      |     2 */    u2 _code_size;
+/*   42      |     2 */    u2 _name_index;
+/*   44      |     2 */    u2 _signature_index;
+/*   46      |     2 */    u2 _method_idnum;
+/*   48      |     2 */    u2 _max_stack;
+/*   50      |     2 */    u2 _max_locals;
+/*   52      |     2 */    u2 _size_of_parameters;
+/*   54      |     2 */    u2 _orig_method_idnum;
+                         public:
+                           static const u2 MAX_IDNUM;
+                           static const u2 UNSET_IDNUM;
+
+                           /* total size (bytes):   56 */
+                         } *
+
+type = class MethodCounters : public Metadata {
+                         private:
+/*   16      |     8 */    Method *_method;
+/*   24      |     4 */    int _interpreter_invocation_count;
+/*   28      |     2 */    u2 _interpreter_throwout_count;
+/*   30      |     2 */    u2 _number_of_breakpoints;
+/*   32      |     4 */    class InvocationCounter {
+                             private:
+/*   32      |     4 */        uint _counter;
+
+                               /* total size (bytes):    4 */
+                           } _invocation_counter;
+/*   36      |     4 */    class InvocationCounter {
+                             private:
+/*   36      |     4 */        uint _counter;
+
+                               /* total size (bytes):    4 */
+                           } _backedge_counter;
+/*   40      |     4 */    int _nmethod_age;
+/*   44      |     4 */    int _interpreter_invocation_limit;
+/*   48      |     4 */    int _interpreter_backward_branch_limit;
+/*   52      |     4 */    int _interpreter_profile_limit;
+/*   56      |     4 */    int _invoke_mask;
+/*   60      |     4 */    int _backedge_mask;
+/*   64      |     4 */    float _rate;
+/* XXX  4-byte hole  */
+/*   72      |     8 */    jlong _prev_time;
+/*   80      |     1 */    u1 _highest_comp_level;
+/*   81      |     1 */    u1 _highest_osr_comp_level;
+/* XXX  6-byte padding  */
+
+                           /* total size (bytes):   88 */
+                         } *
