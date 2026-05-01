@@ -29,7 +29,7 @@ InterpreterRuntime::throw_pending_exception do nothing
 
 编译执行:
 notrycatch: C1 athrow => jmp RuntimeStub - unwind_exception Runtime1 stub(Runtime1::generate_unwind_exception) => exception_handler_for_return_address
-intrycatch: C1 athrow => call RuntimeStub - handle_exception_nofpu Runtime1 stub(Runtime1::generate_handle_exception 有多种不同的 handle_exception)
+intrycatch: C1 athrow => call RuntimeStub - handle_exception_nofpu Runtime1 stub(Runtime1::generate_handle_exception 有多种不同的 handle_exception) => set return addr to the return of Runtime1::exception_handler_for_pc
 C1 implicit exception dispatches to call stub addr
 C2 null check implicit exception call UncommonTrapBlob
 C2 test check explicit exception call UncommonTrapBlob
@@ -61,7 +61,7 @@ JVM_handle_linux_signal => (interp) TemplateInterpreter::_throw_XXXException_ent
 
 SharedRuntime::exception_handler_for_return_address => (interp) TemplateInterpreter::_rethrow_exception_entry (include _throw_exception_entry asm code)
                                                     => (comp) nmethod::exception_begin (HSDIS反编译的stub[Exception Handler])
-                                                    => (comp) StubRoutines::_catch_exception_entry for _call_stub_return_address
+                                                    => (特殊case) StubRoutines::_catch_exception_entry to jmp _call_stub_return_address(JavaCalls::call()相关)
 
 安全点机制(5种场景)
 1. 解析执行进入安全点: Interpreter::notice_safepoints() => copy_table(&_safept_table, &_active_table) ====> InterpreterRuntime::at_safepoint => IRT_ENTRY
