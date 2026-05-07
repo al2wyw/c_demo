@@ -2,6 +2,7 @@
 // Created by 李扬 on 2025/11/17.
 //
 
+#include <stdio.h>
 #include <stdlib.h>
 
 // 用bpftrace可抓到每次Page Fault的地址
@@ -11,10 +12,14 @@
 int const PAGE_SIZE = 4096;
 
 void main() {
-
-    char *buf = malloc(PAGE_SIZE * 10); //只分配虚拟空间
-    buf[0] = 'A';           // 第一次写入，Page Fault分配物理页
-    buf[PAGE_SIZE] = 'B';   // 跨页访问，再次Page Fault
+    int loop = 10000;
+    char *buf = malloc(PAGE_SIZE * loop); //只分配虚拟空间
+    printf("buf: %p\n", buf);
+    for (int i = 0; i < loop; i++) {
+        //buf[0] = 'A';           // 第一次写入，Page Fault分配物理页
+        //buf[PAGE_SIZE] = 'B';   // 跨页访问，再次Page Fault
+        buf[i * PAGE_SIZE] = 'A'; // touch memory
+    }
 
     free(buf);
 }
