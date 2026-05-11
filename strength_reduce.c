@@ -27,6 +27,9 @@ time:
 45000
 71000
 573000
+
+https://llvm.org/docs/CommandGuide/llvm-mca.html
+llvm-mca -timeline -bottleneck-analysis str_loop.s
  */
 int test(register int h, int loop) {
     long long start = get_timestamp_ns();
