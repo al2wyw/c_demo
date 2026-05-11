@@ -2,9 +2,28 @@
 // Created by 李扬 on 2026/5/10.
 //
 /*
-内存写后读涉及内存别名时的周期长 ???
+内存读写涉及内存别名(写后读)时的cpu周期会加长
+记得用O3优化，不然O1有太多的内存操作影响实验结果
 */
+#include <stdio.h>
+#include <stdlib.h>
+
+void read_write(int* src, int* dst, int n) {
+    int val = 0;
+    for (int i = 0; i < n; i++) {
+        *dst = val;
+        val = *src + 1;
+    }
+}
 
 int main(int argc, char *argv[]) {
+
+    int loop = (argc > 1) ? atoi(argv[1]) : 10000;
+    int check = (argc > 2) ? atoi(argv[2]) : 1;
+
+    int i = 2;
+    int j = 2;
+    read_write( &i, check == 1 ? &j : &i, loop);
+    printf("%d, %d\n", i, j);
     return 0;
 }
