@@ -1,0 +1,150 @@
+perf stat ./cs 100000
+start
+producer finished
+consumer finished
+
+ Performance counter stats for './cs 100000':
+
+       1262.305920      task-clock (msec)         #    0.579 CPUs utilized
+           200,016      context-switches          #    0.158 M/sec
+               141      cpu-migrations            #    0.112 K/sec
+               221      page-faults               #    0.175 K/sec
+                 0      cycles                    #    0.000 GHz
+                 0      stalled-cycles-frontend   #    0.00% frontend cycles idle
+                 0      stalled-cycles-backend    #    0.00% backend  cycles idle
+                 0      instructions              #    0.00  insns per cycle
+                 0      branches                  #    0.000 K/sec
+                 0      branch-misses             #    0.000 K/sec
+
+       2.178470386 seconds time elapsed
+
+
+perf stat taskset -c 0 ./cs 100000
+start
+producer finished
+consumer finished
+
+ Performance counter stats for 'taskset -c 0 ./cs 100000':
+
+        260.161009      task-clock (msec)         #    0.999 CPUs utilized
+           200,021      context-switches          #    0.769 M/sec
+                 3      cpu-migrations            #    0.012 K/sec
+               441      page-faults               #    0.002 M/sec
+                 0      cycles                    #    0.000 GHz
+                 0      stalled-cycles-frontend   #    0.00% frontend cycles idle
+                 0      stalled-cycles-backend    #    0.00% backend  cycles idle
+                 0      instructions              #    0.00  insns per cycle
+                 0      branches                  #    0.000 K/sec
+                 0      branch-misses             #    0.000 K/sec
+
+       0.260536213 seconds time elapsed
+
+
+
+# 为什么 `taskset -c 0` 让 cpu-migrations 大幅减少，但 context-switches 基本不变
+
+这是一个非常好的观察！要理解这个现象，需要先厘清 **context-switch（上下文切换）** 和 **cpu-migration（CPU 迁移）** 这两个概念的本质区别。
+
+## 一、两个概念的本质
+
+### 1. Context Switch（上下文切换）
+**定义**：CPU 从执行一个线程切换到执行另一个线程（或进程）的过程。无论这两个线程是否在同一个 CPU 上，只要发生了"换人执行"，就计为一次上下文切换。
+
+**触发场景**：
+- 线程主动让出 CPU（如调用 `pthread_cond_wait`、`pthread_mutex_lock` 阻塞、`sleep` 等）
+- 时间片耗尽被抢占
+- 被更高优先级线程抢占
+- I/O 阻塞
+
+### 2. CPU Migration（CPU 迁移）
+**定义**：一个线程**从一个 CPU 核心被调度到另一个 CPU 核心**上继续执行。它是 context-switch 的一个**子集场景**——即"切换且换核"。
+
+**触发场景**：
+- 调度器进行负载均衡（load balancing），把线程从繁忙核迁到空闲核
+- 线程被唤醒时，原来运行的核正忙，调度器选择了别的核
+
+---
+
+## 二、回到你的代码分析
+
+你的`context_switch.c` 中，`producer` 和 `consumer` 通过 `pthread_cond_wait` / `pthread_cond_signal` 严格交替执行：
+
+```
+producer 生产数据 → signal → wait 在 cond 上
+consumer 被唤醒 → 消费数据 → signal → wait 在 cond 上
+producer 被唤醒 → 生产数据 → ...
+```
+
+每一轮"生产-消费"循环必然产生 **2 次上下文切换**（producer 阻塞→consumer 运行，consumer 阻塞→producer 运行）。
+
+`LOOP_COUNT = 100000`，所以理论上 ≈ 200,000 次 context-switch，与你观测的 `200,016` 和 `200,021` 完全吻合。
+
+---
+
+## 三、为什么 `taskset -c 0` 后 context-switch 不变？
+
+| 指标 | 不绑核 | 绑核到 CPU0 | 变化原因 |
+|------|--------|--------------|----------|
+| **context-switches** | 200,016 | 200,021 | **几乎不变** ✅ |
+| **cpu-migrations** | 141 | 3 | **大幅减少** ⬇️ |
+| **task-clock** | 1262 ms | 260 ms | **降到 1/5** ⬇️ |
+| **耗时** | 2.17 s | 0.26 s | **快了 8 倍** ⚡ |
+
+### 关键原因：
+
+#### ① context-switch 由"程序逻辑"决定，与核数无关
+
+你的程序的同步逻辑决定了 producer 和 consumer 必须**交替阻塞与唤醒**。无论它们运行在：
+- 1 个核上（轮流上 CPU0）
+- 2 个核上（一个在 CPU0，一个在 CPU3）
+
+**每一轮交接都是一次 context-switch**。`taskset -c 0` 只是限制了"在哪儿换"，不能消除"换"这个动作本身。
+
+#### ② cpu-migration 由"调度器行为"决定，绑核后被禁用
+
+不绑核时，Linux CFS 调度器会做负载均衡：
+- producer 醒来时，CPU0 可能正在跑 consumer，调度器把 producer 派到 CPU1
+- 下一轮 consumer 醒来，可能又被派到 CPU2
+- → 产生 141 次迁移
+
+绑核到 CPU0 后，两个线程**只能在 CPU0 上跑**，调度器无处可迁，迁移自然降到 3（剩下的 3 次可能是初始化阶段或内核辅助任务造成的）。
+
+---
+
+## 四、为什么绑核后耗时反而快了 8 倍？
+
+这是这个实验最有意思的地方，可以画图理解：
+
+```mermaid
+graph LR
+    subgraph "不绑核 (2.17s)"
+        A1[producer<br/>在 CPU0] -.signal+迁移.-> B1[consumer<br/>被调度到 CPU3]
+        B1 -.cache miss<br/>跨核同步.-> A2[producer<br/>被调度到 CPU1]
+    end
+
+    subgraph "绑核 CPU0 (0.26s)"
+        A3[producer<br/>CPU0] --signal--> B3[consumer<br/>CPU0]
+        B3 --signal--> A4[producer<br/>CPU0]
+    end
+```
+
+**绑核后变快的原因**：
+1. **缓存亲和性（Cache Affinity）**：`mutex`、`cond`、`shared_data` 这些共享变量始终在 CPU0 的 L1/L2 缓存里，无需跨核同步缓存行（避免了 MESI 协议的 cache line bouncing）
+2. **避免 IPI（Inter-Processor Interrupt）**：跨核唤醒线程需要发送处理器间中断，开销很大
+3. **task-clock 从 1262ms 降到 260ms**：说明 CPU 真正"做事"的时间大幅减少，之前大部分时间花在了跨核协调上
+
+> 注意 `CPUs utilized`：不绑核时是 0.579（多核但利用率低），绑核后是 0.999（单核但用满）。这恰恰说明**这种强同步的生产者-消费者模型并不能从多核中获益，反而被多核拖累**。
+
+---
+
+## 五、结论
+
+| 指标 | 决定因素 | taskset 是否影响 |
+|------|---------|------------------|
+| **context-switch** | 程序的同步/阻塞逻辑 | ❌ 不影响 |
+| **cpu-migration** | 调度器跨核迁移决策 | ✅ 直接消除 |
+
+一句话总结：
+> **绑核消除的是"换核"，不是"换线程"**。你的程序逻辑要求 producer 和 consumer 必须互相等待、轮流执行，所以 context-switch 数量由 `LOOP_COUNT × 2` 决定，与是否绑核无关；而 cpu-migration 是调度器的"自由发挥"，绑核后调度器没了选择空间，自然就降为 0 附近。
+
+这也是高性能服务（如 Redis、DPDK、数据库的关键线程）通常会绑核的原因——**消除 cpu-migration 带来的 cache 失效，比追求"多核并行"更划算**，尤其对于强同步的工作负载。
