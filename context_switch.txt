@@ -39,7 +39,47 @@ consumer finished
 
        0.260536213 seconds time elapsed
 
+perf stat -e L1-dcache-load-misses,branch-load-misses,L1-icache-load-misses,cpu-cycles,instructions,cs,migrations,faults taskset -c 0 ./cs 100000
+start
+producer finished
+consumer finished
 
+ Performance counter stats for 'taskset -c 0 ./cs 100000':
+
+         4,792,581      L1-dcache-load-misses                                       
+         2,736,372      branch-load-misses                                          
+         3,567,462      L1-icache-load-misses                                       
+                 0      cpu-cycles                                                  
+     1,084,268,090      instructions                                                
+           200,002      cs                                                          
+                 0      migrations                                                  
+               320      faults                                                      
+
+       0.331861776 seconds time elapsed
+
+       0.157618000 seconds user
+       0.174210000 seconds sys
+
+perf stat -e L1-dcache-load-misses,branch-load-misses,L1-icache-load-misses,cpu-cycles,instructions,cs,migrations,faults ./cs 100000
+start
+producer finished
+consumer finished
+
+ Performance counter stats for './cs 100000':
+
+       138,067,703      L1-dcache-load-misses                                       
+         8,590,027      branch-load-misses                                          
+       163,284,022      L1-icache-load-misses                                       
+                 0      cpu-cycles                                                  
+     1,315,712,942      instructions                                                
+           200,001      cs                                                          
+                 7      migrations                                                  
+               157      faults                                                      
+
+       4.495827633 seconds time elapsed
+
+       0.022917000 seconds user
+       3.790797000 seconds sys
 
 # 为什么 `taskset -c 0` 让 cpu-migrations 大幅减少，但 context-switches 基本不变
 
