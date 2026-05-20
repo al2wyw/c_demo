@@ -1,7 +1,7 @@
 //
 // Created by 李扬 on 2026/5/19.
 //
-// taskset -c 0 cpu-migrations大幅减少，但是context switch不变
+// taskset -c 0 cpu-migrations大幅减少，但是context switch不变，主要的延迟都在cache-miss上
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
