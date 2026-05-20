@@ -373,3 +373,34 @@ perf stat -e '{cpu-cycles,instructions}' -e '{L1-dcache-loads,L1-dcache-load-mis
 | 如何避免？ | ① 拆分多次运行 ② 用 `-v` 查看每个事件的实际监控比例 ③ 减少同时统计的硬件事件 ④ 在容器里需提升 perf 权限 |
 
 > 💡 **经验法则**：用 `perf stat -e ...` 时，**硬件事件总数控制在 4 个以内**最安全；如果必须看更多事件，分多次运行，或者接受多路复用带来的精度损失。另外注意 `cs`、`migrations`、`faults`、`task-clock` 都是软件事件，不占 PMC，可以随便加。
+
+# perf 无法观测对应的事件排查
+# 1. 是否在容器里
+[ -f /.dockerenv ] && echo "IN DOCKER" || echo "not docker"
+cat /proc/1/cgroup | head -5          # 看 cgroup path 有没有 docker/kubepods
+
+# 2. paranoid 级别
+cat /proc/sys/kernel/perf_event_paranoid
+sudo sysctl -w kernel.perf_event_paranoid=1
+
+| 值 | 含义 |
+|---|---|
+| `3` | 完全禁用（Debian/Ubuntu 默认有时是这个） |
+| `2` | 只允许用户态采样，**不能采内核** |
+| `1` | 允许用户态 + 内核态 |
+| `0` | 允许 CPU 事件 |
+| `-1` | 允许所有，包括原始 tracepoint |
+
+# 3. CPU 是否暴露了 PMU
+grep -E 'vmx|svm|pdpe1gb|arch_perfmon' /proc/cpuinfo | head -2
+#   若没有 arch_perfmon → PMU 对你不可见（典型虚机/容器）
+
+# 4. 直接尝试采 cycles，立刻知道行不行
+perf stat -e cycles,instructions -- sleep 1
+#   可能的报错:
+#     "<not supported>"   → PMU 被屏蔽
+#     "Permission denied" → paranoid 太高
+#     正常数字            → PMU 能用
+
+# 5. dmesg 里找 PMU 相关信息
+dmesg | grep -i -E 'perf|pmu' | head
