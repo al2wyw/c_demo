@@ -81,6 +81,7 @@ consumer finished
        0.022917000 seconds user
        3.790797000 seconds sys
 
+[任务规划完成]
 # 为什么 `taskset -c 0` 让 cpu-migrations 大幅减少，但 context-switches 基本不变
 
 这是一个非常好的观察！要理解这个现象，需要先厘清 **context-switch（上下文切换）** 和 **cpu-migration（CPU 迁移）** 这两个概念的本质区别。
@@ -188,3 +189,187 @@ graph LR
 > **绑核消除的是"换核"，不是"换线程"**。你的程序逻辑要求 producer 和 consumer 必须互相等待、轮流执行，所以 context-switch 数量由 `LOOP_COUNT × 2` 决定，与是否绑核无关；而 cpu-migration 是调度器的"自由发挥"，绑核后调度器没了选择空间，自然就降为 0 附近。
 
 这也是高性能服务（如 Redis、DPDK、数据库的关键线程）通常会绑核的原因——**消除 cpu-migration 带来的 cache 失效，比追求"多核并行"更划算**，尤其对于强同步的工作负载。
+
+
+
+[任务规划完成]
+# 为什么 `cpu-cycles` 显示为 0？—— perf 硬件事件的 PMU 计数器冲突问题
+
+这是一个非常专业且常见的 perf 使用陷阱！你观察到的现象**不是 bug**，而是 **PMU（Performance Monitoring Unit，性能监控单元）硬件计数器数量不足导致的"事件复用失败"**。
+
+## 一、核心原因：硬件 PMU 计数器数量有限
+
+CPU 内部有专门的硬件寄存器来统计性能事件，这些寄存器叫 **PMC（Performance Monitor Counter）**。它们的数量是**物理固定的**，无法扩展：
+
+| CPU 类型 | 通用计数器（GP）| 固定计数器（Fixed）|
+|----------|----------------|-------------------|
+| Intel 主流 x86 | 4 个（HT 开启时） / 8 个（HT 关闭）| 3 个（cycles, instructions, ref-cycles 专用）|
+| AMD Zen | 6 个 | 无（或少量）|
+| ARM | 通常 4~6 个 | 1 个（cycle counter）|
+
+> 你在容器/虚拟机里跑 perf 时，**Hypervisor 通常只暴露 2~4 个通用计数器**，甚至完全屏蔽固定计数器。这是关键！
+
+## 二、你的命令请求了多少个硬件事件？
+
+```bash
+perf stat -e L1-dcache-load-misses,branch-load-misses,L1-icache-load-misses,\
+            cpu-cycles,instructions,cs,migrations,faults ./cs 100000
+```
+
+我们逐个分类：
+
+| 事件 | 类型 | 是否占用硬件 PMC |
+|------|------|------------------|
+| `L1-dcache-load-misses` | Hardware cache event | ✅ 占 1 个 GP 计数器 |
+| `branch-load-misses` | Hardware cache event | ✅ 占 1 个 GP 计数器 |
+| `L1-icache-load-misses` | Hardware cache event | ✅ 占 1 个 GP 计数器 |
+| `cpu-cycles` | Hardware event | ✅ 占 1 个固定计数器（或 GP）|
+| `instructions` | Hardware event | ✅ 占 1 个固定计数器（或 GP）|
+| `cs`（context-switches）| **Software event** | ❌ 内核软件统计，不占 PMC |
+| `migrations`（cpu-migrations）| **Software event** | ❌ 内核软件统计，不占 PMC |
+| `faults`（page-faults）| **Software event** | ❌ 内核软件统计，不占 PMC |
+
+**结论**：你请求了 **5 个硬件事件**！
+
+---
+
+## 三、为什么 `cpu-cycles` 偏偏是 0？
+
+当请求的硬件事件数量 > 可用 PMC 数量时，内核会启动 **"事件多路复用"（multiplexing）** 机制：
+- 内核轮流让每组事件占用 PMC 一段时间，最后按比例缩放（scale）出估算值
+- perf 输出会显示一列 `[xx.xx%]` 表示该事件实际被监控的时间占比
+
+但是在以下情况，事件会**完全无法计数（显示为 0）**：
+
+### 情况 ①：在容器/KVM/云主机里，PMU 被严格限制
+
+很多虚拟化平台（尤其是公有云、Docker 默认配置）会：
+- 只暴露 1~3 个 GP 计数器
+- **完全禁用固定计数器**（`fixed counters`）
+
+而 `cpu-cycles` 在 Intel 上会**优先尝试用固定计数器**（fixed counter 1）。如果固定计数器被禁，又恰好所有 GP 计数器都被前面的 cache 事件抢占了，调度器可能"分配失败"，结果就是 **0**。
+
+### 情况 ②：事件冲突（Event Scheduling Conflict）
+
+某些 cache 事件在硬件上有"约束"——只能在特定的 PMC 槽位上跑（例如 Intel 的某些 offcore/uncore 事件只能用 PMC0/PMC1）。当多个有约束的事件相互冲突，内核调度器（perf_event scheduler）放不下时，**部分事件会被静默丢弃**。
+
+### 情况 ③：内核版本/权限问题
+
+- `/proc/sys/kernel/perf_event_paranoid` 等级过高（≥2）会限制硬件事件
+- 容器没有 `CAP_PERFMON` 或 `CAP_SYS_ADMIN` 能力
+
+---
+
+## 四、为什么 `perf stat ./cs 100000`（不指定 -e）就正常？
+
+不带 `-e` 时，perf 使用**默认事件集**（Default Event Set），通常是：
+
+```
+task-clock, context-switches, cpu-migrations, page-faults,    ← 全是 software event
+cpu-cycles, instructions, branches, branch-misses              ← 4 个 hardware event
+```
+
+这 4 个硬件事件经过内核精心挑选，**正好能放进大多数 CPU 的 PMC 里**（2 个固定 + 2 个通用，或 4 个通用），不会冲突，所以 `cpu-cycles` 能正确计数。
+
+而你手动指定的 5 个硬件事件超出了容器的 PMC 配额，触发了上述冲突。
+
+---
+
+## 五、如何验证和解决？
+
+### 验证：查看事件复用比例
+
+加 `-v`（verbose）参数运行：
+
+```bash
+perf stat -v -e L1-dcache-load-misses,branch-load-misses,L1-icache-load-misses,\
+              cpu-cycles,instructions ./cs 100000
+```
+
+正常输出会在每行末尾看到 `[100.00%]`；如果是 `[60.00%]` 表示该事件只被监控了 60% 的时间；如果显示 `<not counted>` 或 `<not supported>`，则说明硬件不支持或被禁用。
+
+### 查看你机器的 PMC 数量
+
+```bash
+# 方式 1: dmesg
+dmesg | grep -i "perf"
+# 通常会看到类似:
+# Performance Events: PEBS fmt2+, Skylake events, 4-deep LBR, generic architected perfmon, full-width counters, Intel PMU driver.
+# ... generic registers: 4
+
+# 方式 2: 直接看 cpuid
+cat /sys/devices/cpu/caps/pmu_name
+ls /sys/bus/event_source/devices/cpu/format/
+```
+
+### 解决方案
+
+#### 方案 1：减少同时统计的硬件事件数（推荐）
+
+把事件分两次跑：
+
+```bash
+# 第一组：cache 相关
+perf stat -e L1-dcache-load-misses,branch-load-misses,L1-icache-load-misses ./cs 100000
+
+# 第二组：cycles 和 instructions（必须一起跑才能算 IPC）
+perf stat -e cpu-cycles,instructions,cs,migrations,faults ./cs 100000
+```
+
+#### 方案 2：让 perf 自动多路复用并标注比例
+
+```bash
+perf stat --no-merge -e L1-dcache-load-misses,branch-load-misses,L1-icache-load-misses,cpu-cycles,instructions,cs,migrations,faults ./cs 100000
+```
+
+输出会带 `[xx.xx%]`，缩放后的值仍然有参考价值。
+
+#### 方案 3：如果在容器里，提升权限
+
+```bash
+# 宿主机调整
+echo -1 > /proc/sys/kernel/perf_event_paranoid
+
+# 或启动容器时加权限
+docker run --cap-add=SYS_ADMIN --cap-add=PERFMON ...
+```
+
+---
+
+## 六、关于"perf 事件之间有冲突吗？" —— 直接回答
+
+✅ **是的，确实存在冲突**，主要有三种：
+
+```mermaid
+graph TD
+    A[perf 事件冲突] --> B[1.数量冲突<br/>Counter Exhaustion]
+    A --> C[2.约束冲突<br/>Constraint Conflict]
+    A --> D[3.分组冲突<br/>Group Scheduling]
+
+    B --> B1[事件总数 > PMC 数量<br/>触发 multiplexing 或丢弃]
+    C --> C1[某些事件只能用特定 PMC 槽位<br/>Intel offcore/PEBS 等]
+    D --> D1[使用 -e '{a,b,c}' 强制分组<br/>组内事件必须同时上 PMC<br/>放不下整组就全部失败]
+```
+
+### 关于事件分组（顺便了解）
+
+如果你想让多个事件**严格同时计数**（比如算 IPC = instructions / cycles），可以用花括号分组：
+
+```bash
+perf stat -e '{cpu-cycles,instructions}' -e '{L1-dcache-loads,L1-dcache-load-misses}' ./cs 100000
+```
+
+**同一组内的事件要么全部成功，要么全部失败**，不会出现"cycles 是 0 但 instructions 有值"这种数据不一致的情况。
+
+---
+
+## 七、总结
+
+| 问题 | 答案 |
+|------|------|
+| 为什么 `cpu-cycles` 是 0？ | 你同时请求了 5 个硬件事件（3 个 cache + cycles + instructions），超过了机器（很可能是容器/虚拟机）可用的 PMC 数量，内核调度器无法给 `cpu-cycles` 分配到计数器槽位 |
+| 为什么默认 `perf stat` 正常？ | 默认事件集只有 4 个硬件事件，精心设计为不冲突 |
+| perf 事件有冲突吗？ | 有，分为**数量冲突**、**硬件约束冲突**、**分组调度冲突**三类 |
+| 如何避免？ | ① 拆分多次运行 ② 用 `-v` 查看每个事件的实际监控比例 ③ 减少同时统计的硬件事件 ④ 在容器里需提升 perf 权限 |
+
+> 💡 **经验法则**：用 `perf stat -e ...` 时，**硬件事件总数控制在 4 个以内**最安全；如果必须看更多事件，分多次运行，或者接受多路复用带来的精度损失。另外注意 `cs`、`migrations`、`faults`、`task-clock` 都是软件事件，不占 PMC，可以随便加。
