@@ -46,8 +46,17 @@ static void bind_to_cpu(pthread_t th, int cpu_id, const char *thread_name) {
 #endif
 }
 
+// 线程参数：把要绑的 cpu 编号传进去，让线程自己第一时间绑核
+typedef struct {
+    int cpu_id;
+    const char *name;
+} thread_arg_t;
+
 // 生产者线程函数
 void* producer(void* arg) {
+    thread_arg_t *ta = (thread_arg_t*)arg;
+    bind_to_cpu(pthread_self(), ta->cpu_id, ta->name);
+
     for (int i = 0; i < LOOP_COUNT; i++) {
         pthread_mutex_lock(&mutex);
 
@@ -67,6 +76,9 @@ void* producer(void* arg) {
 
 // 消费者线程函数
 void* consumer(void* arg) {
+    thread_arg_t *ta = (thread_arg_t*)arg;
+    bind_to_cpu(pthread_self(), ta->cpu_id, ta->name);
+
     for (int i = 0; i < LOOP_COUNT; i++) {
         pthread_mutex_lock(&mutex);
 
@@ -92,11 +104,12 @@ void main(int argc, char *argv[]) {
     int loop = (argc > 1) ? atoi(argv[1]) : LOOP_COUNT;
     LOOP_COUNT = loop;
 
-    //不同的线程设置不同的 cpu affinity
-    pthread_create(&producer_thread, NULL, producer, NULL);
-    pthread_create(&consumer_thread, NULL, consumer, NULL);
-    bind_to_cpu(producer_thread, 0, "producer");
-    bind_to_cpu(consumer_thread, 1, "consumer");
+    // 不同的线程设置不同的 cpu affinity
+    // 让线程自己在入口处第一时间绑核，避免主线程晚绑导致的初始迁移
+    thread_arg_t p_arg = { .cpu_id = 1, .name = "producer" };
+    thread_arg_t c_arg = { .cpu_id = 2, .name = "consumer" };
+    pthread_create(&producer_thread, NULL, producer, &p_arg);
+    pthread_create(&consumer_thread, NULL, consumer, &c_arg);
 
     printf("start\n");
     pthread_join(producer_thread, NULL);
