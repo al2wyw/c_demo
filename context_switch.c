@@ -11,7 +11,11 @@
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 volatile int data_ready = 0;
-int shared_data = 0;
+//false share test
+//int arr_padding1[16] = {0};
+int produce_data = 0;
+//int arr_padding2[16] = {0};
+int consume_data = 0;
 int LOOP_COUNT = 1000000;
 
 // 生产者线程函数
@@ -23,7 +27,7 @@ void* producer(void* arg) {
         while (data_ready) {
             pthread_cond_wait(&cond, &mutex);
         }
-        shared_data = i;
+        produce_data = i;
         data_ready = 1;
 
         pthread_cond_signal(&cond);
@@ -43,6 +47,7 @@ void* consumer(void* arg) {
             pthread_cond_wait(&cond, &mutex);
         }
 
+        consume_data = i;
         data_ready = 0;
 
         pthread_cond_signal(&cond);
