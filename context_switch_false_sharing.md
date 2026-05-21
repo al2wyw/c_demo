@@ -29,7 +29,7 @@ Performance counter stats for './fs 100000':
        3.956702000 seconds sys
 
 
-[root@www c_demo]# perf stat -v -e L1-dcache-load-misses,cache-misses,L1-icache-load-misses,cpu-clock,cs,migrations,faults ./fs_opt 100000
+perf stat -v -e L1-dcache-load-misses,cache-misses,L1-icache-load-misses,cpu-clock,cs,migrations,faults ./fs_opt 100000
 Using CPUID GenuineIntel-6-9E-A
 start
 [producer] bound to CPU 1
@@ -59,6 +59,19 @@ Performance counter stats for './fs_opt 100000':
        0.002526000 seconds user
        4.003852000 seconds sys
 
+# cache-misses基本一致，没有验证false sharing的效果
+两个线程绝大多数时间都在睡眠/唤醒(内核态系统调用 + 上下文切换，每次几百到几千ns、命中无数 kernel 代码的 cache miss)交替运行，
+根本没在目标 cache line(shared_data) 上同时"高频读写"(shared_data的cache miss只占几个 ns)， 最终导致目标 cache line的cache miss被掩没
+
+## 对比一下 false sharing 真正"显现"的条件
+
+经典 false sharing 实验需要满足三个条件，缺一不可：
+
+| 条件 | 你当前代码 | 经典实验 |
+ |---|---|---|
+| 两个 CPU **并发**执行（不串行） | ❌ 锁强制串行 | ✅ 无锁 |
+| 写频率 **极高**（纳秒级） | ❌ 200K 次/秒 | ✅ 数亿次/秒 |
+| 没有其它**强 cache 流量**主导 | ❌ mutex/cond 占主导 | ✅ 只读写目标变量 |
 
 
 ## 几个常见坑
