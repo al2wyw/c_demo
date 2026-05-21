@@ -1,7 +1,7 @@
 //
 // Created by 李扬 on 2026/5/19.
 //
-// 不同的两个cpu核上跑，前后两次运行的cache-misses基本一致，false sharing的效果没有显现出来
+// 不同的两个cpu核上跑，去掉arr_padding注释前后两次运行的cache-misses基本一致，false sharing的效果没有显现出来
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,9 +18,9 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 volatile int data_ready = 0;
 typedef struct {
-    //int arr_padding1[16];
+    //int arr_padding1[32];
     int produce_data;
-    //int arr_padding2[16];
+    //int arr_padding2[32];
     int consume_data;
 } data_t;
 data_t shared_data;

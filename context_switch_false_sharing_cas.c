@@ -12,11 +12,10 @@
 #include <sched.h>
 #endif
 
-volatile int data_ready = 0;
 typedef struct {
-    //int arr_padding1[16];
+    //int arr_padding1[32];
     volatile int produce_data;
-    //int arr_padding2[16];
+    //int arr_padding2[32];
     volatile int consume_data;
 } data_t;
 data_t shared_data;
@@ -56,10 +55,7 @@ void* producer(void* arg) {
     for (int i = 0; i < LOOP_COUNT; i++) {
 
         // 生产数据
-        shared_data.produce_data = i;
-        while (shared_data.consume_data != i) {
-            // busy wait
-        }
+        shared_data.produce_data += i;
 
     }
     printf("producer finished\n");
@@ -74,10 +70,7 @@ void* consumer(void* arg) {
     for (int i = 0; i < LOOP_COUNT; i++) {
 
         // 消费数据
-        shared_data.consume_data = i;
-        while (shared_data.produce_data != i) {
-            // busy wait
-        }
+        shared_data.consume_data += i;
 
     }
     printf("consumer finished\n");
