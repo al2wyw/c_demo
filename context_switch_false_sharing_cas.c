@@ -1,7 +1,6 @@
 //
 // Created by 李扬 on 2026/5/19.
 //
-// 不同的两个cpu核上跑，前后两次运行的cache-misses基本一致，false sharing的效果没有显现出来
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,15 +12,12 @@
 #include <sched.h>
 #endif
 
-
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 volatile int data_ready = 0;
 typedef struct {
     //int arr_padding1[16];
-    int produce_data;
+    volatile int produce_data;
     //int arr_padding2[16];
-    int consume_data;
+    volatile int consume_data;
 } data_t;
 data_t shared_data;
 int LOOP_COUNT = 1000000;
@@ -58,17 +54,13 @@ void* producer(void* arg) {
     bind_to_cpu(pthread_self(), ta->cpu_id, ta->name);
 
     for (int i = 0; i < LOOP_COUNT; i++) {
-        pthread_mutex_lock(&mutex);
 
         // 生产数据
-        while (data_ready) {
-            pthread_cond_wait(&cond, &mutex);
-        }
         shared_data.produce_data = i;
-        data_ready = 1;
+        while (shared_data.consume_data != i) {
+            // busy wait
+        }
 
-        pthread_cond_signal(&cond);
-        pthread_mutex_unlock(&mutex);
     }
     printf("producer finished\n");
     return NULL;
@@ -80,18 +72,13 @@ void* consumer(void* arg) {
     bind_to_cpu(pthread_self(), ta->cpu_id, ta->name);
 
     for (int i = 0; i < LOOP_COUNT; i++) {
-        pthread_mutex_lock(&mutex);
 
-        // 等待数据就绪
-        while (!data_ready) {
-            pthread_cond_wait(&cond, &mutex);
+        // 消费数据
+        shared_data.consume_data = i;
+        while (shared_data.produce_data != i) {
+            // busy wait
         }
 
-        shared_data.consume_data = i;
-        data_ready = 0;
-
-        pthread_cond_signal(&cond);
-        pthread_mutex_unlock(&mutex);
     }
     printf("consumer finished\n");
     return NULL;
