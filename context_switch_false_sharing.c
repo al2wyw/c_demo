@@ -104,6 +104,13 @@ void main(int argc, char *argv[]) {
     int loop = (argc > 1) ? atoi(argv[1]) : LOOP_COUNT;
     LOOP_COUNT = loop;
 
+    printf("LOOP_COUNT=%d, sizeof(data_t)=%zu, "
+           "&produce_data=%p, &consume_data=%p, distance=%ld bytes\n",
+           LOOP_COUNT, sizeof(data_t),
+           (void*)&shared_data.produce_data,
+           (void*)&shared_data.consume_data,
+           (char*)&shared_data.consume_data - (char*)&shared_data.produce_data);
+
     // 不同的线程设置不同的 cpu affinity
     // 让线程自己在入口处第一时间绑核，避免主线程晚绑导致的初始迁移
     thread_arg_t p_arg = { .cpu_id = 1, .name = "producer" };
