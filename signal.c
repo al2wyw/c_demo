@@ -110,13 +110,17 @@ int test_signal_SIGFPE()
     return 0;
 }
 
+// signal_sigsegv 的线程和run 的线程是同一个
 void *run() {
+    int rbp = 0;
+    printf("run rbp %p\n", &rbp);//栈在不停涨
+
     int r = sigsetjmp(env,1);
     if (r == 0) {
         printf("start to trigger SIGSEGV in few seconds %lu\n", getThreadId());
         sleep(7);
         int a[3] = {0};
-        fprintf(stdout, "a[3] = %d\n", a[-1111111]);//trigger SIGSEGV
+        fprintf(stdout, "a[3] = %d\n", a[-11111111111111]);//trigger SIGSEGV
     } else {
         printf("recover from SIGSEGV %lu\n", getThreadId());
         run();

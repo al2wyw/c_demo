@@ -1,0 +1,93 @@
+//
+// Created by 李扬 on 2023/4/29.
+//
+#include <signal.h>
+#include <string.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+
+void get_format_time_ms(char *str_time);
+
+int flag = 1;
+int block = 1;
+
+long getThreadId() {
+    pthread_t cur = pthread_self();
+    return (long)cur;
+}
+
+void *run() {
+    if (block) {
+        sigset_t mask, old_mask;
+        sigemptyset(&mask);
+        sigaddset(&mask, SIGFPE);  // 添加 SIGFPE 信号到掩码
+
+        // 设置信号掩码，阻塞 SIGFPE
+        pthread_sigmask(SIG_BLOCK, &mask, &old_mask);
+
+        printf("Thread: SIGFPE is now blocked  %lu\n", getThreadId());
+    }
+
+    printf("start to trigger SIGFPE in few seconds %lu\n", getThreadId());
+    sleep(3);
+
+    int a = 1, b = 0, c;
+    c = a / b;
+    fprintf(stdout, "c = %d\n", c);
+
+    printf("recover from SIGFPE %lu\n", getThreadId());
+    return NULL;
+}
+
+void signal_SIGFPE()
+{
+    fprintf(stdout, "caught SIGFPE signal %lu\n", getThreadId());
+}
+
+void signal_SIGSEGV()
+{
+    fprintf(stdout, "caught SIGSEGV signal %lu\n", getThreadId());
+}
+
+int test_signal_SIGFPE()
+{
+    if (signal(SIGFPE, signal_SIGFPE) == SIG_ERR) {
+        fprintf(stdout, "cannot handle SIGFPE\n");
+    } else {
+        fprintf(stdout, "xxxxx\n");
+    }
+
+    pthread_t thrd1;
+    if (pthread_create(&thrd1, NULL, run, NULL) != 0)
+    {
+        printf("thread error:%s \n", strerror(errno));
+        return 1;
+    }
+    pthread_detach(thrd1);
+    return 0;
+}
+
+void wait_signal()
+{
+    while (flag) {
+        char timeStamp[32];
+        get_format_time_ms(timeStamp);
+        fprintf(stdout, "%s, please press to exit %lu\n", timeStamp, getThreadId());
+        unsigned int ret = sleep(1);
+        if (ret != 0) {
+            get_format_time_ms(timeStamp);
+            printf("%s, sleep error:%s %d %lu\n", timeStamp, strerror(errno), ret, getThreadId());
+        }
+    }
+}
+
+void main(int argc, char *argv[])
+{
+    block = (argc > 1) ? atoi(argv[1]) : 1;
+
+    test_signal_SIGFPE();
+    wait_signal();
+}
