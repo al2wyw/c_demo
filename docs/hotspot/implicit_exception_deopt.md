@@ -79,4 +79,4 @@ if (n->is_MachNullCheck()) {
 
 这是一种"乐观优化 + 失败回退"的典型 JIT 策略：**正常路径零开销，异常路径付出退优化代价**。
 
-**fast path zero-cost, slow path is OS-handled**
+**fast path zero-cost, slow path is OS-handled (网络协议栈tcp实现的一种优化手段)**
