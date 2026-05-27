@@ -126,7 +126,7 @@ void wait_signal()
         char timeStamp[32];
         get_format_time_ms(timeStamp);
         fprintf(stdout, "%s, please press to exit %lu\n", timeStamp, getThreadId());
-        unsigned int ret = sleep(1);
+        unsigned int ret = sleep(1); //sleep会被信号中断并返回0，大坑
         if (ret != 0) {
             get_format_time_ms(timeStamp);
             printf("%s, sleep error:%s %d %lu\n", timeStamp, strerror(errno), ret, getThreadId());
