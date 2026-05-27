@@ -126,6 +126,7 @@ void wait_signal()
         char timeStamp[32];
         get_format_time_ms(timeStamp);
         fprintf(stdout, "%s, please press to exit %lu\n", timeStamp, getThreadId());
+        // 信号会中断某些耗时的系统调用，但c库做了重试，所以不会返回EINTR
         unsigned int ret = sleep(1); //sleep会被信号中断并返回0，大坑
         if (ret != 0) {
             get_format_time_ms(timeStamp);
