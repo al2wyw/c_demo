@@ -56,6 +56,23 @@ void release_store_fence(volatile intptr_t* p, intptr_t v) {
                           : "0" (v), "r" (p)
                           : "memory");
 }
+/*
+0000000000400580 <load_acquire>:
+  400580:       48 8b 07                mov    (%rdi),%rax
+  400583:       c3                      ret
+
+0000000000400590 <release_store>:
+  400590:       48 89 37                mov    %rsi,(%rdi)
+  400593:       c3                      ret
+
+00000000004005a0 <store_fence>:
+  4005a0:       48 87 37                xchg   %rsi,(%rdi)
+  4005a3:       c3                      ret
+
+00000000004005b0 <release_store_fence>:
+  4005b0:       48 87 37                xchg   %rsi,(%rdi)
+  4005b3:       c3                      ret
+ */
 //order access
 
 #define THREAD_SIZE     10
