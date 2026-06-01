@@ -131,6 +131,13 @@ get value from field
 volatile_barrier:
 if os::is_MP() {if StoreLoad { lock addl $0x0,(%rsp);}} //只有StoreLoad有额外操作
 
+编译执行
+LIRGenerator::do_LoadField
+LIRGenerator::do_StoreField
+Parse::do_get_xxx
+Parse::do_put_xxx
+jdk15解释执行和编译执行底层都使用相同的membar函数实现内存屏障
+
 内联缓存优化CompiledIC: (https://wiki.openjdk.org/spaces/HotSpot/pages/11829292/Overview+of+CompiledIC+and+CompiledStaticCall)
 resolve_opt_virtual_call_C / resolve_virtual_call_C {
     callee_method = SharedRuntime::resolve_helper(thread, true, true / false, CHECK_NULL);
