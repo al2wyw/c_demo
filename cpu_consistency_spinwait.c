@@ -6,11 +6,11 @@
 //
 // __atomic 是 GCC 内置函数‌，需 GCC 4.7+，C11 标准原子操作是 <stdatomic.h> 中的 atomic_* 函数
 // 在单线程下cpu保证内存最终语义一致，在多线程下需要额外的内存序来实现跨线程的内存顺序控制
-// 当一个线程以release语义写入原子变量，另一个线程以acquire语义读取同一变量时，前者的所有前序内存操作对后者可见(happen-before)
-//内存序	    原子性	同步性	性能开销
-//relaxed	✓	    ✗	低
-//acquire/release	✓	✓	中
-//seq_cst	✓	✓	高
+// 当一个线程以release语义原子写入变量，另一个线程以acquire语义原子读取同一变量时，前者的所有前序内存操作对后者可见(happen-before)(不能缺少原子操作)
+//内存序	            原子性	同步性	性能开销
+//relaxed	        ✓	    ✗	    低
+//acquire/release	✓	    ✓	    中
+//seq_cst	        ✓	    ✓	    高
 // 无锁设计基于 原子操作 和 内存序控制
 #include <stdio.h>
 #include <stdlib.h>
