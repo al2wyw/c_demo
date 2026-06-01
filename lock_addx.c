@@ -27,6 +27,35 @@ void fence() {
     // always use locked addl since mfence is sometimes expensive
     __asm__ volatile ("lock; addl $0,0(%%rsp)" : : : "cc", "memory");
 }
+/* gcc -O3 -> objdump -S
+0000000000400550 <acquire>: // 读内存
+  400550:       48 8b 04 24             mov    (%rsp),%rax
+  400554:       c3                      ret
+
+0000000000400560 <release>: // 写内存
+  400560:       c7 44 24 fc 00 00 00    movl   $0x0,-0x4(%rsp)
+  400567:       00
+  400568:       c3                      ret
+
+0000000000400570 <fence>: // lock + 读写内存
+  400570:       f0 83 04 24 00          lock addl $0x0,(%rsp)
+  400575:       c3                      ret
+ */
+
+intptr_t load_acquire(volatile intptr_t*   p) { return *p; }
+void release_store(volatile intptr_t* p, intptr_t v) { *p = v; }
+void store_fence(intptr_t* p, intptr_t v) {
+    __asm__ __volatile__ ("xchgq (%2), %0"
+                          : "=r" (v)
+                          : "0" (v), "r" (p)
+                          : "memory");
+}
+void release_store_fence(volatile intptr_t* p, intptr_t v) {
+    __asm__ __volatile__ ("xchgq (%2), %0"
+                          : "=r" (v)
+                          : "0" (v), "r" (p)
+                          : "memory");
+}
 //order access
 
 #define THREAD_SIZE     10

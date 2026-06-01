@@ -97,19 +97,23 @@ implicit exception, rare branch hit(Deoptimization::DeoptReason) => jmp other co
 对比opt和deopt后的代码好像没有什么区别(除了call UncommonTrapBlob被替换成真正的处理逻辑)，那uncommon trap的机制有什么作用? (参考uncommon_trap.md)
 
 memory order机制
-four primitive memory barrier operations:
-Load1(s); LoadLoad; Load2: Loads before Load1 may *not* float below Load2
-Store1(s); StoreStore; Store2: Stores before Store1 may *not* float below Store2
-Load1(s); LoadStore; Store2: Loads before Load1 may *not* float below Store2
-Store1(s); StoreLoad; Load2: Stores before Store1 may *not* float below Load2
+four primitive memory barrier operations: (参考JSR-133的描述，比较subtle)
+Load1(s); LoadLoad; Load2
+Store1(s); StoreStore; Store2
+Load1(s); LoadStore; Store2
+Store1(s); StoreLoad; Load2
 
 |     memory accesses      | ^
-|------- release  ---------| |  StoreStore/LoadStore
+|------- release  ---------| |  StoreStore
+                             |
       memory accesses -------|
+                             |
 |------- acquire  ---------| |  LoadLoad/LoadStore
 |     memory accesses      | V
-fence = release + acquire       StoreLoad
-load_acquire = acquire + read variable; release_store = release + write variable; store_fence = fence + write variable
+
+          fence(lock)           StoreLoad
+
+load_acquire = acquire + read variable; release_store = release + write variable; store_fence/release_store_fence = fence(xchgq) + write variable
 why StoreStore is release and LoadLoad/LoadStore is acquire:(from java并发编程的艺术)
 normal r/w StoreStore LoadStore volatile w StoreLoad
 volatile r LoadLoad LoadStore normal r/w
