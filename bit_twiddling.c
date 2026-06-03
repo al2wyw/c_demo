@@ -5,12 +5,12 @@
 #include <stdio.h>
 
 unsigned int has_x_byte(unsigned int x, unsigned char y) {
-    x = x ^ (y << 24 | y << 16 | y << 8 | y);
+    x = x ^ (y * 0x01010101U);
     return (x - 0x01010101) & ~x & 0x80808080;
 }
 
 unsigned long has_x_byte_l(unsigned long x, unsigned char y) {
-    x = x ^ (y << 56 | y << 48 | y << 40 | y << 32 | y << 24 | y << 16 | y << 8 | y);
+    x = x ^ ((unsigned long)y * 0x0101010101010101UL);
     return (x - 0x0101010101010101UL) & ~x & 0x8080808080808080UL;
 }
 
@@ -22,7 +22,7 @@ unsigned long has_zero_byte_l(unsigned long x) {
     return (x - 0x0101010101010101UL) & ~x & 0x8080808080808080UL;
 }
 
-void main() {
+int main() {
     printf("%u\n", has_zero_byte(0x01020304));
     printf("%u\n", has_zero_byte(0x01020300));
     printf("%u\n", has_zero_byte(0x00020300));
@@ -38,4 +38,5 @@ void main() {
     printf("%lu\n", has_x_byte_l(0x0102030405060708UL, 0x09));
     printf("%lu\n", has_x_byte_l(0x0102030905060708UL, 0x09));
     printf("%lu\n", has_x_byte_l(0x0902030905060708UL, 0x09));
+    return 0;
 }
