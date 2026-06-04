@@ -37,6 +37,12 @@ int get_padding_zero_l(unsigned long v) {
     int r = get_padding_zero(v & 0xffffffff);
     return r == 32 ? get_padding_zero(v >> 32) + r : r;
 }
+/*
+int get_padding_zero_l(unsigned long v) {
+    unsigned int low = v & 0xffffffff;
+    return low == 0 ? get_padding_zero(v >> 32) + 32 : get_padding_zero(low);
+}
+ */
 
 int main() {
     printf("%u\n", has_zero_byte(0x01020304));
