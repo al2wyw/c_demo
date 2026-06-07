@@ -110,9 +110,10 @@ void perf_test(){
         //target =  (target & 0xff) << 24 | target >> 8;
     }
 
-    //分支预测命中高的情况下更优，用perf stat查看branch-miss和ipc
+    //分支预测命中高的情况下更优，用perf stat查看branch-miss和ipc，用perf record只能查看热点，看不出branch-miss的影响
     for (int i = 0; i < 1000000000; i++) {
-        zero_byte_2(target);
+        volatile unsigned int sink;
+        sink = zero_byte_2(target);
         //target =  (target & 0xff) << 24 | target >> 8;
     }
 }
