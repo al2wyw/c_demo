@@ -1,7 +1,9 @@
 //
 // Created by 李扬 on 2026/6/3.
 //
-
+#ifdef __bmi2__
+#include <x86gprintrin.h>
+#endif
 #include <stdio.h>
 
 unsigned int has_x_byte(unsigned int x, unsigned char y) {
@@ -43,6 +45,18 @@ int get_padding_zero_l(unsigned long v) {
     return low == 0 ? get_padding_zero(v >> 32) + 32 : get_padding_zero(low);
 }
  */
+
+// bmi: bit manipulation instruction
+__attribute__((target("bmi2")))
+unsigned int zero_byte(unsigned int x) {
+#ifdef __bmi2__
+    unsigned int r = (x - 0x01010101) & ~x & 0x80808080;
+    // 让一部分用 BMI2 的 PEXT（如果机器支持）
+    return  _pext_u32(r, 0x80808080);
+#else
+    return 0;
+#endif
+}
 
 unsigned int zero_byte_0(unsigned int x) {
     unsigned int r = (x - 0x01010101) & ~x & 0x80808080;
@@ -127,6 +141,7 @@ int main() {
 
     unsigned int target = 0x01020300;
     for (int i = 0; i < 16; i++) {
+        printf("zero_byte_n: %u\n", zero_byte(target));
         printf("zero_byte_0: %u\n", zero_byte_0(target));
         printf("zero_byte_1: %u\n", zero_byte_1(target));
         printf("zero_byte_2: %u\n", zero_byte_2(target));
