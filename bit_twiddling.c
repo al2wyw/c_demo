@@ -44,6 +44,66 @@ int get_padding_zero_l(unsigned long v) {
 }
  */
 
+unsigned int zero_byte_0(unsigned int x) {
+    unsigned int r = (x - 0x01010101) & ~x & 0x80808080;
+    // 直接把 4 个 sign bit 收成一个 4bit mask（避免逐个移位）
+    // r 只有第 7/15/23/31 位可能是 1
+    unsigned int m = ((r * 0x00204081U) >> 28) & 0xF;  // 把 4 个 sign 位塞到低 4 bit
+    return m;
+}
+
+unsigned int zero_byte_1(unsigned int x) {
+    unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
+    if (ret == 0) {
+        return 0;
+    }
+    unsigned int ret1 = (ret & 0xff) >> 7 ;
+    unsigned int ret2 = (ret >> 8 & 0xff) >> 6;
+    unsigned int ret3 = (ret >> 16 & 0xff) >> 5;
+    unsigned int ret4 = (ret >> 24 & 0xff) >> 4;
+    ret1 |= ret2;
+    ret3 |= ret4;
+    return ret1 | ret3;
+}
+
+unsigned int zero_byte_2(unsigned int x) {
+    unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
+    unsigned int ret2 = 0;
+    int i = 7;
+    while (ret != 0) {
+        ret2 |= (ret & 0xff) >> i;
+        ret >>= 8;
+        i--;
+    }
+    return ret2;
+}
+
+// 阻止内联，call zero_byte_1 就会回来
+// 把 zero_byte_1 改成：
+//   __attribute__((noinline)) unsigned int zero_byte_1(...)
+// 或者用 volatile 强制使用返回值：
+//   volatile unsigned int sink;
+//   sink = zero_byte_1(0x01020300);
+#pragma GCC push_options
+#pragma GCC optimize ("O0")
+void perf_test(){
+    unsigned int target = 0x01020300;
+    // 0x01020300 zero_byte_2的while只要运行一次就结束，zero_byte_1无论如何都要把指令全部运行完
+    // target每次都改变，while的分支预测被打乱，性能就会变差
+    for (int i = 0; i < 1000000000; i++) {
+        volatile unsigned int sink;
+        sink = zero_byte_1(target);
+        //target =  (target & 0xff) << 24 | target >> 8;
+    }
+
+    //分支预测命中高的情况下更优，用perf stat查看branch-miss和ipc
+    for (int i = 0; i < 1000000000; i++) {
+        zero_byte_2(target);
+        //target =  (target & 0xff) << 24 | target >> 8;
+    }
+}
+#pragma GCC pop_options
+
 int main() {
     printf("%u\n", has_zero_byte(0x01020304));
     printf("%u\n", has_zero_byte(0x01020300));
@@ -64,5 +124,15 @@ int main() {
     printf("%d\n", get_padding_zero_l(0x0102030405060708UL));
     printf("%d\n", get_padding_zero_l(0x0102030405060700UL));
     printf("%d\n", get_padding_zero_l(0x0102030405060000UL));
+
+    unsigned int target = 0x01020300;
+    for (int i = 0; i < 16; i++) {
+        printf("zero_byte_0: %u\n", zero_byte_0(target));
+        printf("zero_byte_1: %u\n", zero_byte_1(target));
+        printf("zero_byte_2: %u\n", zero_byte_2(target));
+        target =  (target & 0xff) << 24 | target >> 8;
+    }
+
+    perf_test();
     return 0;
 }
