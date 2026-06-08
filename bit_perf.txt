@@ -1,0 +1,77 @@
+// 使用不变的 0x01020300 进行循环测试
+unsigned int zero_byte_1(unsigned int x) {
+    unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
+    unsigned int ret1 = (ret & 0xff) >> 7 ;
+    unsigned int ret2 = (ret >> 8 & 0xff) >> 6;
+    unsigned int ret3 = (ret >> 16 & 0xff) >> 5;
+    unsigned int ret4 = (ret >> 24 & 0xff) >> 4;
+    ret1 |= ret2;
+    ret3 |= ret4;
+    return ret1 | ret3;
+}
+//zero_byte_2逻辑有点错误
+unsigned int zero_byte_2(unsigned int x) {
+    unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
+    unsigned int ret2 = 0;
+    while (ret != 0) {
+        ret2 |= (ret & 0xff) >> 7;
+        ret >>= 8;
+    }
+    return ret2;
+}
+
+perf record -g
++   99.99%     0.00%  bit_twiddling_o  bit_twiddling_o3      [.] main                                                                   ▒
++   39.29%    39.29%  bit_twiddling_o  bit_twiddling_o3      [.] zero_byte_1                                                            ▒
++   31.28%    31.28%  bit_twiddling_o  bit_twiddling_o3      [.] perf_test                                                              ◆
++   29.42%    29.42%  bit_twiddling_o  bit_twiddling_o3      [.] zero_byte_2
+
+Percent│    Disassembly of section .text:
+       │
+       │    0000000000400740 <zero_byte_1>:
+       │    zero_byte_1():
+ 19.47 │      mov %edi,%eax
+  0.01 │      lea -0x1010101(%rdi),%edi
+       │      not %eax
+  0.01 │      and %eax,%edi
+ 19.78 │      and $0x80808080,%edi
+       │      mov %edi,%edx
+       │      mov %edi,%eax
+  0.01 │      shr $0x7,%edx
+ 20.13 │      shr $0xe,%eax
+       │      and $0x1,%edx
+       │      and $0x3,%eax
+       │      or  %edx,%eax
+ 20.28 │      mov %edi,%edx
+  0.01 │      shr $0x15,%edi
+       │      shr $0x1c,%edx
+       │      and $0x7,%edi
+ 20.28 │      or  %edx,%eax
+       │      or  %edi,%eax
+  0.01 │    ← ret
+
+
+Percent│
+       │
+       │
+       │    Disassembly of section .text:
+       │
+       │    0000000000400780 <zero_byte_2>:
+       │    zero_byte_2():
+ 18.99 │      lea  -0x1010101(%rdi),%edx
+  0.02 │      not  %edi
+  7.66 │      xor  %eax,%eax
+  9.33 │      and  %edi,%edx
+ 10.18 │      and  $0x80808080,%edx
+       │    ↓ je   30
+  0.04 │      nop
+  7.00 │18:   mov  %edx,%ecx
+  8.96 │      add  %eax,%eax
+ 11.09 │      shr  $0x7,%ecx
+  0.04 │      and  $0x1,%ecx
+  7.61 │      or   %ecx,%eax
+  8.76 │      shr  $0x8,%edx
+ 10.34 │    ↑ jne  18
+       │    ← ret
+       │      nop
+       │30: ← ret
