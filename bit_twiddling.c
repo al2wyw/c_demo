@@ -117,9 +117,33 @@ void perf_test(){
         sink = zero_byte_2(target);
         //target =  (target & 0xff) << 24 | target >> 8;
     }
-    // llvm-mca 生成的 Critical sequence 还是没搞明白
 }
 #pragma GCC pop_options
+
+// gcc -S -O3 bit_twiddling.c -o bit.s
+// llvm-mca -timeline -bottleneck-analysis bit.s
+// llvm-mca 必须应用在循环上，不能有ret和call跳转:
+// # LLVM-MCA-BEGIN
+// Loop:
+// # ...
+// jb .Loop
+// # LLVM-MCA-END
+void zero_byte_1_mca() {
+    for (int i = 0; i < 10000000; i++) {
+        __asm volatile("# LLVM-MCA-BEGIN zero_byte_1":::"memory");
+        unsigned int x = 0x01020300;
+        unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
+        unsigned int ret1 = (ret & 0xff) >> 7 ;
+        unsigned int ret2 = (ret >> 8 & 0xff) >> 6;
+        unsigned int ret3 = (ret >> 16 & 0xff) >> 5;
+        unsigned int ret4 = (ret >> 24 & 0xff) >> 4;
+        ret1 |= ret2;
+        ret3 |= ret4;
+        ret1 |= ret3;
+        volatile unsigned int sink = ret1;
+        __asm volatile("# LLVM-MCA-END":::"memory");
+    }
+}
 // *************** bit perf test ******************
 
 int main() {

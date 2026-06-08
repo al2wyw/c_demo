@@ -11,14 +11,15 @@
 - `zero_byte_2`：序言 5 条 + 循环体 7×N 条，N 是 zero byte 出现的最高字节位置（1~4，或 0 直接退出）。
     - 输入 `0x01020300`（zero byte 在第 1 字节，N=1）：5 + 7×1 = **12 条**
 
-### (b) 串行依赖链长度（关键！）
+### (b) 串行依赖链长度（关键！） (只分析存在差异的代码片段，分析的有点不太对)
 
 `zero_byte_1` 中所有 `shr/and/or` 都串在 `ret1 |= ret2 |= ret3 |= ret4` 这条**或链**上：
 
 ```
-edi → shr7 → and1 → or → or → or → eax(ret)
-              ↑      ↑    ↑
-         shr14&3   shr21&7  shr28
+edi → shr7 → and1 →  or →    or →   or → eax(ret)
+      edx    edx      ↑      ↑      ↑
+                 shr14&3   shr21&7  shr28
+                  %eax     %edi    %edx                 
 ```
 
 最后 3 个 `or` 是**串行**的（`or %edx,%eax; or %edi,%eax`），形成一条长度为 5~6 的依赖链。CPU 必须等这条链跑完才能 ret，下一次 `zero_byte_1` 调用又要从头开始（虽然不同调用之间可以乱序，但每次调用内部链很长）。
@@ -26,7 +27,9 @@ edi → shr7 → and1 → or → or → or → eax(ret)
 `zero_byte_2` 循环体里的依赖：
 
 ```
-edx → shr7 → and1 → or → eax(ret2)
+edx → shr7 → and1 → or → eax(ret)
+                    ↑
+                add eax
 edx → shr8 → edx (下一轮)
 ```
 
