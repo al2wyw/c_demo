@@ -46,6 +46,7 @@ int get_padding_zero_l(unsigned long v) {
 }
  */
 
+// *************** bit perf test ******************
 // bmi: bit manipulation instruction
 __attribute__((target("bmi2")))
 unsigned int zero_byte(unsigned int x) {
@@ -116,8 +117,10 @@ void perf_test(){
         sink = zero_byte_2(target);
         //target =  (target & 0xff) << 24 | target >> 8;
     }
+    // llvm-mca 生成的 Critical sequence 还是没搞明白
 }
 #pragma GCC pop_options
+// *************** bit perf test ******************
 
 int main() {
     printf("%u\n", has_zero_byte(0x01020304));
