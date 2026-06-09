@@ -100,6 +100,9 @@ unsigned int zero_byte_2(unsigned int x) {
 #pragma GCC optimize ("O0")
 void perf_test(){
     unsigned int target = 0x01020300;
+    //查看cpu资源端口压力 (zero_byte_1 的 port_0 + port_6 利用率接近 100%, 被4个shr操作撑满)
+    //perf stat -e cycles,instructions,uops_dispatched_port.port_0,uops_dispatched_port.port_6,uops_dispatched_port.port_1,uops_dispatched_port.port_5,branches,branch-misses
+
     // 0x01020300 zero_byte_2的while只要运行一次就结束，zero_byte_1无论如何都要把指令全部运行完
     // target每次都改变，while的分支预测被打乱，性能就会变差
     for (int i = 0; i < 10000000; i++) {
@@ -114,8 +117,7 @@ void perf_test(){
         sink = zero_byte_2(target);
         //target =  (target & 0xff) << 24 | target >> 8;
     }
-    //查看cpu资源端口压力
-    //perf stat -e cycles,instructions,uops_dispatched_port.port_0,uops_dispatched_port.port_6,uops_dispatched_port.port_1,uops_dispatched_port.port_5,branches,branch-misses
+
     for (int i = 0; i < 10000000; i++) {
         volatile unsigned int sink;
         sink = zero_byte_0(target);
