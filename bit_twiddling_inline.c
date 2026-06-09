@@ -6,6 +6,8 @@
 #endif
 #include <stdio.h>
 
+#define has_zero_byte(x) ((x - 0x01010101) & ~x & 0x80808080)
+
 // *************** bit perf test ******************
 // 用 static inline + always_inline 强制内联进 perf_test，免除 call/ret 开销，
 // 同时避免裸 inline 在 -O0 调用方下产生 undefined symbol 链接错误
@@ -15,7 +17,7 @@
 __attribute__((target("bmi2")))
 ALWAYS_INLINE unsigned int zero_byte(unsigned int x) {
 #ifdef __bmi2__
-    unsigned int r = (x - 0x01010101) & ~x & 0x80808080;
+    unsigned int r = has_zero_byte(x);
     // 让一部分用 BMI2 的 PEXT（如果机器支持）
     return  _pext_u32(r, 0x80808080);
 #else
@@ -24,7 +26,7 @@ ALWAYS_INLINE unsigned int zero_byte(unsigned int x) {
 }
 
 ALWAYS_INLINE unsigned int zero_byte_0(unsigned int x) {
-    unsigned int r = (x - 0x01010101) & ~x & 0x80808080;
+    unsigned int r = has_zero_byte(x);
     // 直接把 4 个 sign bit 收成一个 4bit mask（避免逐个移位）
     // r 只有第 7/15/23/31 位可能是 1
     unsigned int m = ((r * 0x00204081U) >> 28) & 0xF;  // 把 4 个 sign 位塞到低 4 bit
@@ -32,7 +34,7 @@ ALWAYS_INLINE unsigned int zero_byte_0(unsigned int x) {
 }
 
 ALWAYS_INLINE unsigned int zero_byte_1(unsigned int x) {
-    unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
+    unsigned int ret = has_zero_byte(x);
     unsigned int ret1 = (ret & 0xff) >> 7 ;
     unsigned int ret2 = (ret >> 8 & 0xff) >> 6;
     unsigned int ret3 = (ret >> 16 & 0xff) >> 5;
@@ -43,7 +45,7 @@ ALWAYS_INLINE unsigned int zero_byte_1(unsigned int x) {
 }
 
 ALWAYS_INLINE unsigned int zero_byte_2(unsigned int x) {
-    unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
+    unsigned int ret = has_zero_byte(x);
     unsigned int ret2 = 0;
     int i = 7;
     while (ret != 0) {
