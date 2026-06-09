@@ -120,7 +120,13 @@ void perf_test(){
     zero_byte_driver();
 }
 #pragma GCC pop_options
-
+/*
++   98.48%     0.00%  bit_inline_o3  bit_inline_o3         [.] main                                                                     ◆
++   36.04%    36.04%  bit_inline_o3  bit_inline_o3         [.] zero_byte_1_driver                                                       ▒
++   32.49%    32.49%  bit_inline_o3  bit_inline_o3         [.] zero_byte_2_driver                                                       ▒
++   15.23%    15.23%  bit_inline_o3  bit_inline_o3         [.] zero_byte_0_driver                                                       ▒
++   14.72%    14.72%  bit_inline_o3  bit_inline_o3         [.] zero_byte_driver
+ */
 // *************** bit perf test ******************
 
 // gcc -O3 bit_twiddling_inline.c -D__bmi2__ -o bit_inline_o3
