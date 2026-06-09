@@ -95,7 +95,7 @@ void perf_test(){
 }
 #pragma GCC pop_options
 
-// gcc -S -O3 bit_twiddling.c -o bit.s
+// gcc -S -O3 bit_twiddling_perf.c -o bit.s
 // llvm-mca -timeline -bottleneck-analysis bit.s
 // llvm-mca 必须应用在循环上，不能有ret和call跳转:
 // # LLVM-MCA-BEGIN
@@ -115,6 +115,7 @@ void zero_byte_1_mca() {
 }
 // *************** bit perf test ******************
 
+// gcc -O3 bit_twiddling_perf.c -D__bmi2__ -o bit_perf_o3
 int main() {
     unsigned int target = 0x01020300;
     for (int i = 0; i < 16; i++) {

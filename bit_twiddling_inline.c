@@ -61,9 +61,7 @@ ALWAYS_INLINE unsigned int zero_byte_2(unsigned int x) {
 
 // 让 perf_test 走 -O3，配合 always_inline，被测函数会被真正内联进循环体，不再产生 call/ret 开销；
 // 用 ESCAPE 阻止常量折叠、DO_NOT_OPTIMIZE_AWAY 阻止 DCE，这样既能内联又不会被整段消除。
-// 注意：zero_byte 带 target("bmi2")，把它 always_inline 进来，调用方必须也具备同等或更强的target 选项
-__attribute__((target("bmi2")))
-void perf_test(){
+void zero_byte_1_driver(){
     unsigned int target = 0x01020300;
     ESCAPE(target);  // 把 target 变成编译器“看不穿”的值，阻止常量传播
 
@@ -73,6 +71,11 @@ void perf_test(){
         unsigned int r = zero_byte_1(x);   // 因 always_inline，这里直接展开成位运算
         DO_NOT_OPTIMIZE_AWAY(r);           // 阻止结果被 DCE，但不产生真实指令
     }
+}
+
+void zero_byte_2_driver(){
+    unsigned int target = 0x01020300;
+    ESCAPE(target);
 
     for (int i = 0; i < 10000000; i++) {
         unsigned int x = target;
@@ -80,6 +83,11 @@ void perf_test(){
         unsigned int r = zero_byte_2(x);
         DO_NOT_OPTIMIZE_AWAY(r);
     }
+}
+
+void zero_byte_0_driver(){
+    unsigned int target = 0x01020300;
+    ESCAPE(target);
 
     for (int i = 0; i < 10000000; i++) {
         unsigned int x = target;
@@ -87,6 +95,14 @@ void perf_test(){
         unsigned int r = zero_byte_0(x);
         DO_NOT_OPTIMIZE_AWAY(r);
     }
+}
+
+// 注意：zero_byte 带 target("bmi2")，把它 always_inline 进来，调用方必须也具备同等或更强的target 选项
+__attribute__((target("bmi2")))
+void zero_byte_driver(){
+    unsigned int target = 0x01020300;
+    ESCAPE(target);
+
     for (int i = 0; i < 10000000; i++) {
         unsigned int x = target;
         ESCAPE(x);
@@ -95,7 +111,19 @@ void perf_test(){
     }
 }
 
+#pragma GCC push_options
+#pragma GCC optimize ("O0")
+void perf_test(){
+    zero_byte_1_driver();
+    zero_byte_2_driver();
+    zero_byte_0_driver();
+    zero_byte_driver();
+}
+#pragma GCC pop_options
+
 // *************** bit perf test ******************
+
+// gcc -O3 bit_twiddling_inline.c -D__bmi2__ -o bit_inline_o3
 int main() {
     perf_test();
     return 0;
