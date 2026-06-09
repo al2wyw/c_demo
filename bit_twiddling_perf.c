@@ -28,6 +28,7 @@ unsigned int zero_byte(unsigned int x) {
 #endif
 }
 
+//0x00204081 = 2^0 + 2^7 + 2^14 + 2^21，每个 1 之间间隔 7 位。 r * 0x00204081 把 r 中在 sign bit位 7/15/23/31 上的 1 "挤"到最高的 4 位 [31:28]
 unsigned int zero_byte_0(unsigned int x) {
     unsigned int r = has_zero_byte(x);
     // 直接把 4 个 sign bit 收成一个 4bit mask（避免逐个移位）
