@@ -69,9 +69,6 @@ unsigned int zero_byte_0(unsigned int x) {
 
 unsigned int zero_byte_1(unsigned int x) {
     unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
-    if (ret == 0) {
-        return 0;
-    }
     unsigned int ret1 = (ret & 0xff) >> 7 ;
     unsigned int ret2 = (ret >> 8 & 0xff) >> 6;
     unsigned int ret3 = (ret >> 16 & 0xff) >> 5;
@@ -105,16 +102,28 @@ void perf_test(){
     unsigned int target = 0x01020300;
     // 0x01020300 zero_byte_2的while只要运行一次就结束，zero_byte_1无论如何都要把指令全部运行完
     // target每次都改变，while的分支预测被打乱，性能就会变差
-    for (int i = 0; i < 1000000000; i++) {
+    for (int i = 0; i < 10000000; i++) {
         volatile unsigned int sink;
         sink = zero_byte_1(target);
         //target =  (target & 0xff) << 24 | target >> 8;
     }
 
     //分支预测命中高的情况下更优，用perf stat查看branch-miss和ipc，用perf record只能查看热点，看不出branch-miss的影响
-    for (int i = 0; i < 1000000000; i++) {
+    for (int i = 0; i < 10000000; i++) {
         volatile unsigned int sink;
         sink = zero_byte_2(target);
+        //target =  (target & 0xff) << 24 | target >> 8;
+    }
+    //查看cpu资源端口压力
+    //perf stat -e cycles,instructions,uops_dispatched_port.port_0,uops_dispatched_port.port_6,uops_dispatched_port.port_1,uops_dispatched_port.port_5,branches,branch-misses
+    for (int i = 0; i < 10000000; i++) {
+        volatile unsigned int sink;
+        sink = zero_byte_0(target);
+        //target =  (target & 0xff) << 24 | target >> 8;
+    }
+    for (int i = 0; i < 10000000; i++) {
+        volatile unsigned int sink;
+        sink = zero_byte(target);
         //target =  (target & 0xff) << 24 | target >> 8;
     }
 }
