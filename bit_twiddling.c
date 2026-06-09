@@ -47,9 +47,13 @@ int get_padding_zero_l(unsigned long v) {
  */
 
 // *************** bit perf test ******************
+// 用 static inline + always_inline 强制内联进 perf_test，免除 call/ret 开销，
+// 同时避免裸 inline 在 -O0 调用方下产生 undefined symbol 链接错误
+#define ALWAYS_INLINE static inline __attribute__((always_inline))
+
 // bmi: bit manipulation instruction
 __attribute__((target("bmi2")))
-unsigned int zero_byte(unsigned int x) {
+ALWAYS_INLINE unsigned int zero_byte(unsigned int x) {
 #ifdef __bmi2__
     unsigned int r = (x - 0x01010101) & ~x & 0x80808080;
     // 让一部分用 BMI2 的 PEXT（如果机器支持）
@@ -59,7 +63,7 @@ unsigned int zero_byte(unsigned int x) {
 #endif
 }
 
-unsigned int zero_byte_0(unsigned int x) {
+ALWAYS_INLINE unsigned int zero_byte_0(unsigned int x) {
     unsigned int r = (x - 0x01010101) & ~x & 0x80808080;
     // 直接把 4 个 sign bit 收成一个 4bit mask（避免逐个移位）
     // r 只有第 7/15/23/31 位可能是 1
@@ -67,7 +71,7 @@ unsigned int zero_byte_0(unsigned int x) {
     return m;
 }
 
-unsigned int zero_byte_1(unsigned int x) {
+ALWAYS_INLINE unsigned int zero_byte_1(unsigned int x) {
     unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
     unsigned int ret1 = (ret & 0xff) >> 7 ;
     unsigned int ret2 = (ret >> 8 & 0xff) >> 6;
@@ -78,7 +82,7 @@ unsigned int zero_byte_1(unsigned int x) {
     return ret1 | ret3;
 }
 
-unsigned int zero_byte_2(unsigned int x) {
+ALWAYS_INLINE unsigned int zero_byte_2(unsigned int x) {
     unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
     unsigned int ret2 = 0;
     int i = 7;
@@ -90,6 +94,45 @@ unsigned int zero_byte_2(unsigned int x) {
     return ret2;
 }
 
+// 反 DCE：告诉编译器“这个值被使用了”，但不产生任何真实指令
+#define DO_NOT_OPTIMIZE_AWAY(x) __asm__ volatile("" :: "r"(x) : "memory")
+// 反常量折叠：把变量“洗”一遍，让编译器把它当成未知值
+#define ESCAPE(x)               __asm__ volatile("" : "+r"(x))
+
+// 让 perf_test 走 -O3，配合 always_inline，被测函数会被真正内联进循环体，不再产生 call/ret 开销；
+// 用 ESCAPE 阻止常量折叠、DO_NOT_OPTIMIZE_AWAY 阻止 DCE，这样既能内联又不会被整段消除。
+void perf_test(){
+    unsigned int target = 0x01020300;
+    ESCAPE(target);  // 把 target 变成编译器“看不穿”的值，阻止常量传播
+
+    for (int i = 0; i < 10000000; i++) {
+        unsigned int x = target;
+        ESCAPE(x);                         // 每轮都洗一次，阻止把循环外提
+        unsigned int r = zero_byte_1(x);   // 因 always_inline，这里直接展开成位运算
+        DO_NOT_OPTIMIZE_AWAY(r);           // 阻止结果被 DCE，但不产生真实指令
+    }
+
+    for (int i = 0; i < 10000000; i++) {
+        unsigned int x = target;
+        ESCAPE(x);
+        unsigned int r = zero_byte_2(x);
+        DO_NOT_OPTIMIZE_AWAY(r);
+    }
+
+    for (int i = 0; i < 10000000; i++) {
+        unsigned int x = target;
+        ESCAPE(x);
+        unsigned int r = zero_byte_0(x);
+        DO_NOT_OPTIMIZE_AWAY(r);
+    }
+    for (int i = 0; i < 10000000; i++) {
+        unsigned int x = target;
+        ESCAPE(x);
+        unsigned int r = zero_byte(x);
+        DO_NOT_OPTIMIZE_AWAY(r);
+    }
+}
+
 // 阻止内联，call zero_byte_1 就会回来
 // 把 zero_byte_1 改成：
 //   __attribute__((noinline)) unsigned int zero_byte_1(...)
@@ -98,7 +141,7 @@ unsigned int zero_byte_2(unsigned int x) {
 //   sink = zero_byte_1(0x01020300);
 #pragma GCC push_options
 #pragma GCC optimize ("O0")
-void perf_test(){
+void perf_test_old() {
     unsigned int target = 0x01020300;
     //查看cpu资源端口压力 (zero_byte_1 的 port_0 + port_6 利用率接近 100%, 被4个shr操作撑满)
     //perf stat -e cycles,instructions,uops_dispatched_port.port_0,uops_dispatched_port.port_6,uops_dispatched_port.port_1,uops_dispatched_port.port_5,branches,branch-misses
@@ -107,25 +150,14 @@ void perf_test(){
     // target每次都改变，while的分支预测被打乱，性能就会变差
     for (int i = 0; i < 10000000; i++) {
         volatile unsigned int sink;
-        sink = zero_byte_1(target);
+        sink = zero_byte_1(target); // unsigned int zero_byte_1(...)
         //target =  (target & 0xff) << 24 | target >> 8;
     }
 
     //分支预测命中高的情况下更优，用perf stat查看branch-miss和ipc，用perf record只能查看热点，看不出branch-miss的影响
     for (int i = 0; i < 10000000; i++) {
         volatile unsigned int sink;
-        sink = zero_byte_2(target);
-        //target =  (target & 0xff) << 24 | target >> 8;
-    }
-
-    for (int i = 0; i < 10000000; i++) {
-        volatile unsigned int sink;
-        sink = zero_byte_0(target);
-        //target =  (target & 0xff) << 24 | target >> 8;
-    }
-    for (int i = 0; i < 10000000; i++) {
-        volatile unsigned int sink;
-        sink = zero_byte(target);
+        sink = zero_byte_2(target); // unsigned int zero_byte_2(...)
         //target =  (target & 0xff) << 24 | target >> 8;
     }
 }
@@ -142,16 +174,7 @@ void perf_test(){
 void zero_byte_1_mca() {
     for (int i = 0; i < 10000000; i++) {
         __asm volatile("# LLVM-MCA-BEGIN zero_byte_1":::"memory");
-        unsigned int x = 0x01020300;
-        unsigned int ret = (x - 0x01010101) & ~x & 0x80808080;
-        unsigned int ret1 = (ret & 0xff) >> 7 ;
-        unsigned int ret2 = (ret >> 8 & 0xff) >> 6;
-        unsigned int ret3 = (ret >> 16 & 0xff) >> 5;
-        unsigned int ret4 = (ret >> 24 & 0xff) >> 4;
-        ret1 |= ret2;
-        ret3 |= ret4;
-        ret1 |= ret3;
-        volatile unsigned int sink = ret1;
+        volatile unsigned int sink = zero_byte_1(0x01020300);
         __asm volatile("# LLVM-MCA-END":::"memory");
     }
 }
