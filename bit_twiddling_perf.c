@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #define has_zero_byte(x) ((x - 0x01010101) & ~x & 0x80808080)
+#define has_zero_byte_l(x) ((x - 0x0101010101010101UL) & ~x & 0x8080808080808080UL)
 #define zero_byte_def(ret)  unsigned int ret1 = (ret & 0xff) >> 7 ; \
                             unsigned int ret2 = (ret >> 8 & 0xff) >> 6; \
                             unsigned int ret3 = (ret >> 16 & 0xff) >> 5; \
@@ -36,6 +37,15 @@ unsigned int zero_byte_0(unsigned int x) {
     // 直接把 4 个 sign bit 收成一个 4bit mask（避免逐个移位）
     // r 只有第 7/15/23/31 位可能是 1
     unsigned int m = ((r * 0x00204081U) >> 28) & 0xF;  // 把 4 个 sign 位塞到低 4 bit
+    return m;
+}
+
+unsigned int zero_byte_0_l(unsigned long x) {
+    // 64 位版本：x 中可能为 1 的 sign bit 位于 bit 7/15/23/31/39/47/55/63（共 8 个，间距 8）
+    // 用魔数 M = 2^0 + 2^7 + 2^14 + 2^21 + 2^28 + 2^35 + 2^42 + 2^49 = 0x0002040810204081
+    // 每个 1 之间间隔 7 位，乘法后把 8 个 sign bit 正好"挤"到结果的最高 8 位 [63:56]，且互不冲突
+    unsigned long r = has_zero_byte_l(x);
+    unsigned int m = (unsigned int)((r * 0x0002040810204081UL) >> 56) & 0xFF;
     return m;
 }
 
@@ -127,6 +137,12 @@ int main() {
         printf("zero_byte_1: %u\n", zero_byte_1(target));
         printf("zero_byte_2: %u\n", zero_byte_2(target));
         target =  (target & 0xff) << 24 | target >> 8;
+    }
+
+    unsigned long target_l = 0x0102030004050607UL;
+    for (int i = 0; i < 16; i++) {
+        printf("zero_byte_0_l: %u\n", zero_byte_0_l(target_l));
+        target_l = (target_l & 0xff) << 56 | target_l >> 8;
     }
 
     perf_test();
