@@ -13,6 +13,7 @@ unsigned long has_x_byte_l(unsigned long x, unsigned char y) {
     return (x - 0x0101010101010101UL) & ~x & 0x8080808080808080UL;
 }
 
+//test whether any byte in a word is 0，not telling which byte is 0，for fast pre-test
 unsigned int has_zero_byte(unsigned int x) {
     return (x - 0x01010101) & ~x & 0x80808080;
 }
@@ -33,24 +34,29 @@ int get_padding_zero(unsigned int v) {
 }
 
 int get_padding_zero_l(unsigned long v) {
-    int r = get_padding_zero(v & 0xffffffff);
-    return r == 32 ? get_padding_zero(v >> 32) + r : r;
-}
-/*
-int get_padding_zero_l(unsigned long v) {
     unsigned int low = v & 0xffffffff;
     return low == 0 ? get_padding_zero(v >> 32) + 32 : get_padding_zero(low);
 }
- */
+
+// telling which byte is exactly 0，slow but accurate
+unsigned int find_zero_byte(unsigned int x) {
+    return ~( (((x) & 0x7F7F7F7FU) + 0x7F7F7F7FU) | (x) ) & 0x80808080U;
+}
+
+unsigned long find_zero_byte_l(unsigned long x) {
+    return ~( (((x) & 0x7F7F7F7F7F7F7F7FUL) + 0x7F7F7F7F7F7F7F7FUL) | (x) ) & 0x8080808080808080UL;
+}
 
 int main() {
     printf("%u\n", has_zero_byte(0x01020304));
     printf("%u\n", has_zero_byte(0x01020300));
     printf("%u\n", has_zero_byte(0x00020300));
+    printf("%u\n", has_zero_byte(0x01010100));
 
     printf("%lu\n", has_zero_byte_l(0x0102030405060708UL));
     printf("%lu\n", has_zero_byte_l(0x0102030005060708UL));
     printf("%lu\n", has_zero_byte_l(0x0002030005060708UL));
+    printf("%lu\n", has_zero_byte_l(0x0101010001010101UL));
 
     printf("%u\n", has_x_byte(0x01020304, 0x05));
     printf("%u\n", has_x_byte(0x01020305, 0x05));
@@ -64,5 +70,14 @@ int main() {
     printf("%d\n", get_padding_zero_l(0x0102030405060700UL));
     printf("%d\n", get_padding_zero_l(0x0102030405060000UL));
 
+    printf("%u\n", find_zero_byte(0x01020304));
+    printf("%u\n", find_zero_byte(0x01020300));
+    printf("%u\n", find_zero_byte(0x00020300));
+    printf("%u\n", find_zero_byte(0x01010100));
+
+    printf("%lu\n", find_zero_byte_l(0x0102030405060708UL));
+    printf("%lu\n", find_zero_byte_l(0x0102030005060708UL));
+    printf("%lu\n", find_zero_byte_l(0x0002030005060708UL));
+    printf("%lu\n", find_zero_byte_l(0x0101010001010101UL));
     return 0;
 }
