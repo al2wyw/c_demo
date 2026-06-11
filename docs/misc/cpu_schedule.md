@@ -211,3 +211,119 @@ sequenceDiagram
 ## 总结一句话
 
 > **多核抢占式调度是高度 per-CPU 的：每个核都有独立时钟中断，独立运行队列，独立执行自己的 `schedule()`。跨核协调通过 IPI 完成，但调度代码永远运行在"被调度的那个核"自身上。**
+
+
+[任务规划完成]
+# Linux 内核线程迁移的完整触发场景
+
+## 一、迁移触发场景全景
+
+```mermaid
+flowchart TB
+    MIG[任务迁移到其他CPU]
+    
+    subgraph 调度器自主触发
+        LB[周期性负载均衡<br/>scheduler_tick]
+        IDLE_LB[idle balance<br/>核空闲时拉任务]
+        NOHZ_LB[NOHZ idle balance<br/>代理空闲核做均衡]
+        NEW_IDLE[newidle_balance<br/>调度时无任务可跑]
+        ACTIVE_LB[active balance<br/>正在跑的任务被拉走]
+        FORK_BAL[fork时选核<br/>select_task_rq]
+        WAKE_BAL[唤醒时选核<br/>wake_affine等]
+        EXEC_BAL[exec时选核<br/>新映像重新选核]
+    end
+    
+    subgraph 外部强制触发
+        AFFINITY[修改亲和性<br/>sched_setaffinity]
+        CPUSET[cpuset变更<br/>cgroup迁移]
+        HOTPLUG[CPU下线<br/>migrate所有任务]
+        ISOLATE[CPU隔离变更]
+    end
+    
+    subgraph 特殊机制
+        NUMA_BAL[NUMA balancing<br/>就近内存]
+        RT_PUSH[RT/DL push&pull<br/>实时任务再均衡]
+        MIGRATION_TH[migration内核线程<br/>stop_machine]
+        ENERGY[EAS能效迁移<br/>大小核架构]
+    end
+    
+    LB --> MIG
+    IDLE_LB --> MIG
+    NOHZ_LB --> MIG
+    NEW_IDLE --> MIG
+    ACTIVE_LB --> MIG
+    FORK_BAL --> MIG
+    WAKE_BAL --> MIG
+    EXEC_BAL --> MIG
+    AFFINITY --> MIG
+    CPUSET --> MIG
+    HOTPLUG --> MIG
+    ISOLATE --> MIG
+    NUMA_BAL --> MIG
+    RT_PUSH --> MIG
+    MIGRATION_TH --> MIG
+    ENERGY --> MIG
+    
+    style MIG fill:#FFE4B5
+```
+
+---
+
+## 四、调度框架下的代码路径
+
+```mermaid
+flowchart TB
+    subgraph 入口
+        TICK[scheduler_tick<br/>每tick一次]
+        SCHED[__schedule<br/>调度切换]
+        WAKE[try_to_wake_up<br/>唤醒]
+        FORK[wake_up_new_task]
+        EXEC[sched_exec]
+        AFF[set_cpus_allowed]
+        HOT[CPU hotplug]
+    end
+    
+    subgraph 选核/均衡核心函数
+        STR[select_task_rq]
+        LB[load_balance]
+        NIB[newidle_balance]
+        ACT[active_load_balance_cpu_stop]
+        MIG[migration_cpu_stop<br/>migration内核线程]
+    end
+    
+    subgraph 实际迁移
+        DEQ[deactivate_task<br/>从源RQ出队]
+        SET[set_task_cpu<br/>修改p->cpu]
+        ENQ[activate_task<br/>入目标RQ]
+    end
+    
+    TICK -->|trigger_load_balance| LB
+    SCHED --> NIB
+    WAKE --> STR
+    FORK --> STR
+    EXEC --> STR
+    AFF --> MIG
+    HOT --> MIG
+    LB -->|hard cases| ACT
+    ACT --> MIG
+    
+    STR --> SET
+    LB --> DEQ --> SET --> ENQ
+    NIB --> DEQ
+    MIG --> DEQ
+    
+    style MIG fill:#FFB6C1
+    style ACT fill:#FFB6C1
+```
+
+**关键函数 `set_task_cpu()`**：所有迁移最终都汇聚到这个函数上修改 `task_struct->cpu`，并触发 perf event `PERF_COUNT_SW_CPU_MIGRATIONS`（你可以用 `perf stat -e cpu-migrations` 来观测）。
+
+---
+
+## 七、一句话总结
+
+> **Linux 中触发 CPU 核迁移的场景 ≈ "调度器需要重新决定任务该在哪个核上跑"的所有时刻**，包括：
+>
+> 周期/空闲/新空闲负载均衡、唤醒选核、fork/exec 选核、亲和性变更、cpuset 变更、CPU 热插拔、active balance、NUMA balancing、RT/DL push/pull、EAS 能效迁移、NOHZ 代理均衡。
+>
+> 其中 `active balance`、`migration 内核线程`、`亲和性变更`、`CPU 热插拔` 这几条路径**会强制打断正在运行的任务**——这是低延迟场景中除了时钟tick之外另一个需要重点防护的干扰源（通过 `isolcpus` + `pthread_setaffinity` 把核隔离开就能基本消除）。
