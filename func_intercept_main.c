@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+// gcc -O0 -g -rdynamic -o fint func_intercept_main.c
 int main() {
     void *p1 = malloc(32);
     void *p2 = malloc(128);
