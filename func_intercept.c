@@ -21,10 +21,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <dlfcn.h>
+#include <execinfo.h>
 
 typedef void *(*malloc_fn_t)(size_t);
 
 static malloc_fn_t real_malloc = NULL;
+
+// 重入保护标志：避免 backtrace/写日志过程中调用malloc再次进入 hook 造成无限递归
+static int in_hook = 0;
 
 static void init_real_malloc(void) {
     real_malloc = (malloc_fn_t) dlsym(RTLD_NEXT, "malloc");
@@ -41,10 +45,30 @@ void *malloc(size_t size) {
 
     void *ptr = real_malloc(size);
 
-    // printf 有可能会调用 malloc，造成无限递归，使用write来避免
+    if (in_hook) {
+        return ptr;
+    }
+    in_hook = 1;
+
+    // printf 可能会调用 malloc，造成无限递归，使用write来避免 或 in_hook 标识
     // printf("malloc(%zu) = %p\n", size, ptr);
-    char buf[32];
+    char buf[64];
     int len = snprintf(buf, sizeof(buf), "malloc(%zu) = %p\n", size, ptr);
-    write(1, buf, len);
+    write(STDOUT_FILENO, buf, len);
+
+    // 打印调用栈：
+    // 1) backtrace 仅写入用户提供的指针数组，不调用 malloc；
+    // 2) backtrace_symbols_fd 直接把符号化结果写到 fd，不会像 backtrace_symbols 那样 malloc 返回字符串数组。
+    void *frames[32];
+    int nframes = backtrace(frames, 32);
+    // 跳过第 0 帧 从第 1 帧开始打印
+    if (nframes > 1) {
+        const char *hdr = "  --- backtrace ---\n";
+        write(STDOUT_FILENO, hdr, 20);
+        backtrace_symbols_fd(frames + 1, nframes - 1, STDOUT_FILENO);
+        write(STDOUT_FILENO, hdr, 20);
+    }
+
+    in_hook = 0;
     return ptr;
 }
