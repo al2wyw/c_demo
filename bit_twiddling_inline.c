@@ -64,7 +64,7 @@ ALWAYS_INLINE unsigned int zero_byte_2(unsigned int x) {
 // 让 perf_test 走 -O3，配合 always_inline，被测函数会被真正内联进循环体，不再产生 call/ret 开销；
 // 用 ESCAPE 阻止常量折叠、DO_NOT_OPTIMIZE_AWAY 阻止 DCE，这样既能内联又不会被整段消除。
 void zero_byte_1_driver(){
-    unsigned int target = 0x01020300;
+    unsigned int target = 0x01020300;     // 变更为volatile，可以避免常量传播，但是for循环每次都需要读内存
     ESCAPE(target);  // 把 target 变成编译器“看不穿”的值，阻止常量传播
 
     for (int i = 0; i < 10000000; i++) {
