@@ -352,7 +352,8 @@ found:
         ↓
     set_tsk_thread_flag(t, TIF_SIGPENDING);  // 设置标志位
         ↓
-    if (t 在睡眠) wake_up_state(t, TASK_INTERRUPTIBLE);
+    if (t 在睡眠) wake_up_state(t, TASK_INTERRUPTIBLE); //唤醒目标线程进行resched处理信号
+    else kick_process           // 发送IPI到目标cpu催促进入内核态处理信号
 ```
 
 此刻 wait_func 线程在 `sigwait()` 中睡眠，会被立即唤醒。
