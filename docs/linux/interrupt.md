@@ -109,7 +109,7 @@ graph TB
 
 ### 2.2 汇编入口：`irq_entries_start`
 
-[arch/x86/include/asm/idtentry.h](/Users/liyang/IdeaProjects/linux/arch/x86/include/asm/idtentry.h) 第 504 行起，生成一张 stub 表，每项 16/32 字节，仅 3 条指令：
+[arch/x86/include/asm/idtentry.h](/linux/arch/x86/include/asm/idtentry.h) 第 504 行起，生成一张 stub 表，每项 16/32 字节，仅 3 条指令：
 
 ```asm
 SYM_CODE_START(irq_entries_start)
@@ -129,7 +129,7 @@ SYM_CODE_END(irq_entries_start)
 
 ### 2.3 通用入口宏 `idtentry` + `idtentry_body`
 
-[arch/x86/entry/entry_64.S](/Users/liyang/IdeaProjects/linux/arch/x86/entry/entry_64.S) 第 289 / 329 行：
+[arch/x86/entry/entry_64.S](/linux/arch/x86/entry/entry_64.S) 第 289 / 329 行：
 
 ```asm
 .macro idtentry_body cfunc has_error_code:req
@@ -158,7 +158,7 @@ SYM_CODE_END(irq_entries_start)
 
 ### 2.4 C 入口宏 `DEFINE_IDTENTRY_IRQ`
 
-[arch/x86/include/asm/idtentry.h](/Users/liyang/IdeaProjects/linux/arch/x86/include/asm/idtentry.h) 第 206 行展开后，`common_interrupt` 是：
+[arch/x86/include/asm/idtentry.h](/linux/arch/x86/include/asm/idtentry.h) 第 206 行展开后，`common_interrupt` 是：
 
 ```c
 __visible noinstr void common_interrupt(struct pt_regs *regs,
@@ -190,7 +190,7 @@ static noinline void __common_interrupt(struct pt_regs *regs, u32 vector)
 
 ### 2.6 `__common_interrupt` 与 vector→irq_desc 映射
 
-[arch/x86/kernel/irq.c](/Users/liyang/IdeaProjects/linux/arch/x86/kernel/irq.c) 第 273 行：
+[arch/x86/kernel/irq.c](/linux/arch/x86/kernel/irq.c) 第 273 行：
 
 ```c
 DEFINE_IDTENTRY_IRQ(common_interrupt)
@@ -240,7 +240,7 @@ desc->action 链表（一个或多个 driver ISR）
 
 ### 2.7 通用 IRQ 子系统：`irq_desc` 与 `irq_chip`
 
-[kernel/irq/](/Users/liyang/IdeaProjects/linux/kernel/irq) 实现硬件无关的中断框架。核心数据结构：
+[kernel/irq/](/linux/kernel/irq) 实现硬件无关的中断框架。核心数据结构：
 
 ```c
 struct irq_desc {
@@ -279,7 +279,7 @@ struct irqaction {
 
 ### 2.8 流处理器：`handle_fasteoi_irq`（典型 MSI/APIC 路径）
 
-[kernel/irq/chip.c](/Users/liyang/IdeaProjects/linux/kernel/irq/chip.c) 第 740 行：
+[kernel/irq/chip.c](/linux/kernel/irq/chip.c) 第 740 行：
 
 ```c
 void handle_fasteoi_irq(struct irq_desc *desc)
@@ -308,7 +308,7 @@ void handle_fasteoi_irq(struct irq_desc *desc)
 
 ### 2.9 调用驱动 ISR：`handle_irq_event`
 
-[kernel/irq/handle.c](/Users/liyang/IdeaProjects/linux/kernel/irq/handle.c)：
+[kernel/irq/handle.c](/linux/kernel/irq/handle.c)：
 
 ```c
 irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc)
@@ -381,7 +381,7 @@ sequenceDiagram
 
 ### 3.1 `irq_exit_rcu()`
 
-[kernel/softirq.c](/Users/liyang/IdeaProjects/linux/kernel/softirq.c) 第 730 行附近：
+[kernel/softirq.c](/linux/kernel/softirq.c) 第 730 行附近：
 
 ```c
 static inline void __irq_exit_rcu(void)
@@ -413,7 +413,7 @@ static inline void __irq_exit_rcu(void)
 
 ### 3.2 `invoke_softirq()` —— 决定就地处理还是丢给 ksoftirqd
 
-[kernel/softirq.c](/Users/liyang/IdeaProjects/linux/kernel/softirq.c) 第 488 行：
+[kernel/softirq.c](/linux/kernel/softirq.c) 第 488 行：
 
 ```c
 static inline void invoke_softirq(void)
@@ -442,7 +442,7 @@ static inline void invoke_softirq(void)
 
 ### 4.1 10 种软中断类型
 
-[kernel/softirq.c](/Users/liyang/IdeaProjects/linux/kernel/softirq.c) 第 67 行：
+[kernel/softirq.c](/linux/kernel/softirq.c) 第 67 行：
 
 ```c
 const char * const softirq_to_name[NR_SOFTIRQS] = {
@@ -478,7 +478,7 @@ DEFINE_PER_CPU(struct task_struct *, ksoftirqd);   // 每 CPU 一个守护线程
 
 ### 4.3 触发：`raise_softirq` 与 `__raise_softirq_irqoff`
 
-[kernel/softirq.c](/Users/liyang/IdeaProjects/linux/kernel/softirq.c) 第 790 / 799 行：
+[kernel/softirq.c](/linux/kernel/softirq.c) 第 790 / 799 行：
 
 ```c
 void __raise_softirq_irqoff(unsigned int nr)
@@ -513,7 +513,7 @@ void raise_softirq(unsigned int nr)
 
 ### 4.4 处理：`__do_softirq` / `handle_softirqs`
 
-[kernel/softirq.c](/Users/liyang/IdeaProjects/linux/kernel/softirq.c) 第 580 行起：
+[kernel/softirq.c](/linux/kernel/softirq.c) 第 580 行起：
 
 ```c
 #define MAX_SOFTIRQ_TIME    msecs_to_jiffies(2)    // 最多跑 2ms
@@ -593,7 +593,7 @@ asmlinkage __visible void __softirq_entry __do_softirq(void)
 
 ### 4.6 ksoftirqd 守护线程
 
-[kernel/softirq.c](/Users/liyang/IdeaProjects/linux/kernel/softirq.c) 第 1063 / 1115 行：
+[kernel/softirq.c](/linux/kernel/softirq.c) 第 1063 / 1115 行：
 
 ```c
 static int ksoftirqd_should_run(unsigned int cpu)
@@ -781,7 +781,7 @@ local_bh_enable();     // 减回去；如果有 pending 软中断 → 立即 do_
 ## 八、特殊路径
 
 ### 8.1 NMI（不可屏蔽中断）
-- 走 `DEFINE_IDTENTRY_RAW(exc_nmi)`（[arch/x86/kernel/nmi.c](/Users/liyang/IdeaProjects/linux/arch/x86/kernel/nmi.c)）
+- 走 `DEFINE_IDTENTRY_RAW(exc_nmi)`（[arch/x86/kernel/nmi.c](/linux/arch/x86/kernel/nmi.c)）
 - **不走** `irq_exit` / softirq 路径
 - 严格 noinstr，使用专门的 IST 栈防止嵌套破坏
 - 用于：硬件错误、watchdog、perf 采样、kgdb panic
@@ -792,7 +792,7 @@ local_bh_enable();     // 减回去；如果有 pending 软中断 → 立即 do_
 - 典型：`smp_send_reschedule(cpu)` → `RESCHEDULE_VECTOR`
 
 ### 8.3 FRED（Flexible Return and Event Delivery，Intel 新机制）
-- [arch/x86/entry/entry_64_fred.S](/Users/liyang/IdeaProjects/linux/arch/x86/entry/entry_64_fred.S)
+- [arch/x86/entry/entry_64_fred.S](/linux/arch/x86/entry/entry_64_fred.S)
 - 统一 syscall、异常、中断的入口逻辑
 - 摆脱 IDT，CPU 自动选择正确的栈和上下文
 
