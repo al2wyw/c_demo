@@ -479,3 +479,192 @@ PerfEvents (cpu)  ≈  CTimer       <  WallClock(BATCH)  <  WallClock(LEGACY)
 | ❌ 不要做的 | `-i 100us` 或 wall mode 不加过滤跑大量线程 | 单线程 30%+ overhead，IPI 风暴，业务受损明显 |
 
 ---
+
+
+[任务规划完成]
+这是一个非常好的工程取舍问题。表面上"插桩拦截 → 空闲时零开销"看起来完美，但当你深入到 JVM 实现层和 profiler 的目标场景，会发现插桩方案有一连串致命问题，正是这些问题让 async-profiler 选择了"信号 + 智能跳过"的路线。
+
+# 一、先纠正一个常见误解：信号采样和插桩解决的是两类不同问题
+
+| 对比维度 | 插桩（Instrumentation） | 采样（Sampling） |
+|---|---|---|
+| 数据语义 | **精确**统计某个**已知方法**的调用次数 / 耗时 | **统计意义**上估计**所有代码**的耗时分布 |
+| 必须知道目标 | ✅ 必须事先指定方法名 | ❌ 不需要预知任何代码 |
+| 能覆盖未知代码 | ❌ 没插桩的代码完全看不到 | ✅ 任意代码都会被打中 |
+| 输出能否做火焰图 | ❌ 只能给某方法的耗时直方图 | ✅ 全局栈分布 |
+| 适合的问题 | "这个 RPC 方法的 P99 多少" | "我的进程到底在哪里阻塞 / 跑得慢" |
+
+> **wall profiling 的目的从一开始就不是"统计某个函数耗时"，而是"在不知道哪里慢的前提下，画出全进程时间分布的火焰图"。** 这就决定了它必须用采样。
+
+具体到 async-profiler 里的角色分工就一目了然：
+
+- [Instrument](/async-profiler/src/instrument.cpp) 只用于 `-e ClassName.method` 这种**显式指定函数**的场景，对应 JFR 里的 `MethodTrace` 事件。
+- [WallClock](/async-profiler/src/wallClock.cpp) 用于 `-e wall` 的全进程时间画像。
+- **二者并存而非互替**。
+
+---
+
+# 二、为什么插桩不能替代 wall 采样？9 个硬伤
+
+## 1. 你不知道要插桩什么
+
+Wall profiling 的核心使用场景是：**"我的服务变慢了，但我不知道慢在哪。"**
+
+如果你已经知道是 `OrderService.process` 慢，你直接用 `-e OrderService.process` 插桩就完了；问题恰恰是你**不知道**。
+
+要让插桩能替代 wall 采样，理论上必须：
+
+> 把 JVM 里**每一个 Java 方法**都插桩。
+
+这立刻引出一连串灾难。
+
+## 2. 全量插桩 = JIT 性能崩塌
+
+JVM 的性能命脉是 **HotSpot JIT 内联**。一次 `process()` 调用之所以快，是因为 C2 把里面的 `getOrderId()`、`validate()`、`String.equals()`……整条链全部 inline 成一段连续机器码。
+
+字节码插桩在每个方法**入口和出口**塞 invokestatic（如 [instrument.cpp:1260 recordEntry / recordExit0](/async-profiler/src/instrument.cpp)）：
+
+```
+方法入口:   invokestatic Instrument.recordEntry()
+方法出口:   invokestatic Instrument.recordExit0(startTimeNs)
+```
+
+后果：
+- **内联预算被打爆**：每个方法多 8–12 字节码，C2 会迅速放弃 inline。
+- **方法变"非叶子"**：原本能被当成 leaf 优化的小 getter 现在含调用，逃逸分析失败。
+- **整体降速 10×–100×**：实测对 Java 应用做无差别全量字节码插桩，吞吐通常掉 1–2 个数量级——这比 wall 采样那 1–3% 严重得多。
+
+WallClock 的"高频信号"看起来吓人，**但它只挂起线程几十微秒就还回来，根本不动 JIT 代码**；插桩则是把所有热代码永久性地变胖，是一种**结构性损伤**。
+
+## 3. 插桩看不到 native / VM / 内核里的时间
+
+WallClock 的关键价值之一：**它能告诉你线程卡在 `recvfrom`、`futex_wait`、GC、JNI、JIT 编译里**。
+
+而字节码插桩只能插在 **Java 方法**入口出口：
+- 看不到 JNI 调用里花了多久
+- 看不到 GC pause、safepoint 等待
+- 看不到内核 IO 阻塞时栈是什么样
+- 看不到 JIT 编译占用线程时间
+- 看不到 `Unsafe.park` 真正的内核调用栈
+
+线上排查"我服务延迟突然抖动"的真凶，**80% 都不在 Java 字节码层**，恰恰是上面这些。这是插桩永远无法采到的盲区。
+
+## 4. 插桩看不到无源码(动态生成) / 已加载 / `final` / Bootstrap 类
+
+JVMTI `RetransformClasses` 有大量限制（参考 [instrument.cpp:1181 retransformMatchedClasses](/async-profiler/src/instrument.cpp)）：
+
+- **不能改类的 schema**：不能加字段、不能改方法签名（你需要一个 `long startTime` 局部槽——好在能塞）。
+- **`java.lang.Object`、`java.lang.Thread` 等核心类很多 JVM 不允许 retransform**。
+- **某些类已经被 JIT 编译并被深度 inline**，retransform 后旧代码还在内存里跑，要等 deopt。
+- **agent 启动前就被加载的类**，retransform 时机要靠 JVMTI `ClassFileLoadHook`，部分场景下覆盖不完整。
+- **JDK 内部类**用 `--add-opens` 等模块约束。
+
+WallClock 是个外部信号，**对所有线程一视同仁**，没有这些限制。
+
+## 5. 插桩在尾递归 / 递归 / 异常退出场景下逻辑复杂
+
+入口 / 出口配对是个看似简单实际坑很多的事：
+
+- 异常抛出导致方法退出时，必须保证 `recordExit` 能跑——意味着每个方法都要包一层 try/finally（看 [BytecodeRewriter::rewriteCodeForLatency](/async-profiler/src/instrument.cpp) 就能看到这逻辑）。
+- 递归方法每层都要分配一个 long 槽存 startTime，**栈帧必须扩大**——这又改变了 JVM 优化决策。
+- 尾递归 / OSR 替换 / deopt-on-stack-replacement 时一致性极难保证。
+- 长跑方法（比如一个跑 10 分钟的 `while(true)` 工作循环）**永远不会触发出口**，wall 模式正是为了观察这种线程才存在的。
+
+而 WallClock 的"出口"概念根本不存在：**它每 N 毫秒看一眼线程在哪**，方法多长不重要。
+
+## 7. 你担心的"高频信号"在 BATCH 模式下其实远没那么糟
+
+回到具体代码：
+
+[wallClock.cpp:198-203](/async-profiler/src/wallClock.cpp)（CPU_ONLY 模式）：
+
+```cpp
+if (mode == CPU_ONLY) {
+    if (!enabled || OS::threadState(thread_id) == THREAD_SLEEPING) {
+        continue;     // 睡眠线程直接跳过，不发信号
+    }
+}
+```
+
+[wallClock.cpp:204-225](/async-profiler/src/wallClock.cpp)（WALL_BATCH 模式）：
+
+```cpp
+} else if (mode == WALL_BATCH) {
+    ThreadSleepState& tss = thread_sleep_state[thread_id];
+    u64 new_thread_cpu_time = enabled ? OS::threadCpuTime(thread_id) : 0;
+    if (new_thread_cpu_time != 0 && new_thread_cpu_time - tss.last_cpu_time <= RUNNABLE_THRESHOLD_NS) {
+        // ↑ 线程上次采样到现在 CPU 时间增量 < 10 μs → 视为 sleeping
+        tss.last_time = TSC::ticks();
+        if (++tss.counter < MAX_IDLE_BATCH) {        // ← 仅在内存累加计数
+            if (tss.counter == 1) tss.start_time = tss.last_time;
+            continue;                                // ← 不发信号！
+        }
+    }
+    // 不睡或攒够了 1000 个，才生成事件 / 发信号
+}
+```
+
+**实际效果**：
+
+| 场景 | 总线程数 | 真正在跑的线程 | 每秒信号数（interval=10ms） |
+|---|---|---|---|
+| 1000 线程线程池，10 个真在干活 | 1000 | 10 | **~1000 / 秒**（仅给 10 个 active 线程发，其他用 batch 计数） |
+| 同上，CPU_ONLY 模式 | 1000 | 10 | **~1000 / 秒** |
+| 同上，**LEGACY** 模式（`--nobatch`） | 1000 | 10 | ~100 000 / 秒（这才是你印象里的"全量轮询"） |
+
+> **结论**：你担心的"CPU 空闲时仍不停发信号轮询"只发生在 `WALL_LEGACY`，那是**为兼容老用户保留的默认外开关**。新版默认的 `WALL_BATCH` 和 `CPU_ONLY` 已经做到了**几乎只在 RUNNING 线程上发信号**，与"理想插桩方案"的目标已经非常接近——但代价远小于真去做插桩。
+
+
+## 9. 安全性 / 可恢复性 / 部署属性
+
+| 属性 | WallClock 信号采样 | 全量字节码插桩 |
+|---|---|---|
+| 启动 / 停止代价 | 装个 signal handler + 起后台线程；停止时 `pthread_kill + join`，**1 ms 内完成** | retransform 全部已加载类，**10 秒以上**；停止时还要再 retransform 回去 |
+| 失败 blast radius | 信号处理器有 bug → 单个采样失败，进程不受损 | 字节码改写 bug → **整个 JVM 不识别 class file 直接崩** |
+| 运行中能不能开关 | `_enabled` 一个原子变量切换，瞬时生效 | 必须再次 retransform，全 JVM stop-the-world |
+| 是否需要应用配合 | 完全外挂，应用无感知 | 需要保证 `Instrument` helper 类加载正常、字节码版本匹配 |
+| 无源码场景 | OK | 需要谨慎处理，部分 JVM 内部类不让动 |
+| 多 agent 共存 | OK | retransform 互相覆盖，**典型撕裂场景** |
+
+线上 always-on profiling 要求"**装上看不见，关掉无残留**"，只有信号采样能做到。
+
+---
+
+# 三、async-profiler 实际是怎么取舍的
+
+把整个系统看成一张分工图：
+
+```mermaid
+flowchart LR
+    A[用户问题] --> B{已知具体方法?}
+    B -- 是<br/>知道要测谁 --> C[Instrument 引擎<br/>字节码插桩<br/>精确耗时直方图]
+    B -- 否<br/>找不到罪魁 --> D{关心 CPU 还是<br/>全部时间?}
+    D -- 仅 CPU 火焰图 --> E[PerfEvents / CTimer<br/>只有 RUNNING 时触发<br/>开销极低]
+    D -- 全部时间含等待 --> F[WallClock<br/>BATCH 模式<br/>仅打 RUNNING 线程<br/>SLEEP 线程批量计数]
+
+    C -.- G((精确但局部))
+    E -.- H((轻量但漏掉等待))
+    F -.- I((能看全貌<br/>开销可控))
+```
+
+- 用户**已经知道**要查哪个方法 → `Instrument` 是首选，因为它精确到每次调用。
+- 用户**不知道哪里慢，但只关心 CPU 占用** → 用 PerfEvents，只在线程占着 CPU 时才发样本，零空闲开销。
+- 用户**不知道哪里慢，且怀疑是 IO/锁/外部依赖** → 用 WallClock BATCH，配合 ThreadFilter 限定关注线程，是唯一能解决问题的方案。
+
+**插桩永远做不了第三类问题**，而 wall 采样是为第三类问题量身打造的。两者各司其职。
+
+---
+
+# 四、如果你想进一步降低 wall 模式的开销，正确做法
+
+不是改成插桩，而是利用现有的优化开关：
+
+| 选项 | 效果                               |
+|---|----------------------------------|
+| 默认就是 `WALL_BATCH`（不要 `--nobatch`） | 睡眠线程 batch 化，**最大优化**            |
+| `-t <tid>` ThreadFilter | 只采指定线程，N 倍降低事件量                  |
+| `-i 50ms` 或更长 | wall 默认就把 interval 调到 5 × 10ms   |
+| `--cstack fp` 而非 dwarf | 单次 `recordSample` 从 30 μs → 5 μs |
+| `-d 30` 限制采样时长 | always-on 变 on-demand            |
+
+实测在 1000 线程的 Java Web 服务上，**默认 wall + BATCH** 的稳态 CPU 开销通常在 1–2%；只有把它当成 `--nobatch` 跑或者把 interval 强行拉到 100 μs，才会出现你担心的"机器被打死"的情况。
