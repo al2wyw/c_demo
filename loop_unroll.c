@@ -1,6 +1,7 @@
 //
 // Created by 李扬 on 2026/4/17.
 //
+//记得用O3优化，不然O1有太多的内存操作影响实验结果
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
