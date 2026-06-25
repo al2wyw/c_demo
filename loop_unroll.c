@@ -1,7 +1,16 @@
 //
 // Created by 李扬 on 2026/4/17.
 //
-//记得用O3优化，不然O1有太多的内存操作影响实验结果
+/**
+ * 记得用O3优化，不然O1有太多的内存操作影响实验结果
+ * gcc loop_unroll.c time_utils.c -O3 -fno-tree-vectorize -o loop_o3
+./loop_o3 100000000
+ret:1860272594, time: 89480000
+ret:1860272594, time: 83132000
+ret:1860272594, time: 79033000
+ret:1860272594, time: 76125000
+ret:1860272594, time: 74138000
+ */
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
