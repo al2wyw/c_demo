@@ -3,13 +3,6 @@
 //
 /**
  * 记得用O3优化，不然O1有太多的内存操作影响实验结果
- * gcc loop_unroll.c time_utils.c -O3 -fno-tree-vectorize -o loop_o3
-./loop_o3 100000000
-ret:1860272594, time: 89480000
-ret:1860272594, time: 83132000
-ret:1860272594, time: 79033000
-ret:1860272594, time: 76125000
-ret:1860272594, time: 74138000
  */
 #include <errno.h>
 #include <stdio.h>
@@ -33,72 +26,6 @@ int base(data_type* arr, int loop) {
     return 0;
 }
 
-int test0(data_type* arr, int loop) {
-    long long start = get_timestamp_ns();
-    data_type x = 0x1;
-    for (int i = 0; i < loop; i+=2) {
-        x = x OP arr[i];
-        x = x OP arr[i+1];
-    }
-    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
-    return 0;
-}
-
-
-int test1(data_type* arr, int loop) { // 累积变量变换
-    long long start = get_timestamp_ns();
-    data_type x = 0x1;
-    data_type y = 0x0;
-    for (int i = 0; i < loop; i+=2) {
-        x = x OP arr[i];
-        y = y OP arr[i+1];
-    }
-    x = x OP y;
-    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
-    return 0;
-}
-
-int test2(data_type* arr, int loop) {
-    long long start = get_timestamp_ns();
-    data_type x = 0x1;
-    for (int i = 0; i < loop; i+=2) {
-        x = x OP arr[i] OP arr[i+1];
-    }
-    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
-    return 0;
-}
-
-
-int test3(data_type* arr, int loop) { // 重新结合变换
-    long long start = get_timestamp_ns();
-    data_type x = 0x1;
-    for (int i = 0; i < loop; i+=2) {
-        x = x OP (arr[i] OP arr[i+1]);
-    }
-    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
-    return 0;
-}
-
-int main(int argc, char *argv[]) {
-    int loop = (argc > 1) ? atoi(argv[1]) : LOOP;
-    data_type* arr = malloc(loop * sizeof(data_type));
-    if (arr == NULL) {
-        printf("malloc failed: %s\n", strerror(errno));
-        return -1;
-    }
-    for (int i = 0; i < loop; i++) {
-        arr[i] = rand() % loop;
-    }
-    base(arr, loop);
-    test0(arr, loop);
-    test1(arr, loop);
-    test2(arr, loop);
-    test3(arr, loop);
-    free(arr);
-    return 0;
-}
-
-/**
 int test0(data_type* arr, int loop) {
     long long start = get_timestamp_ns();
     data_type x = 0x1;
@@ -147,9 +74,77 @@ int test3(data_type* arr, int loop) { // 重新结合变换
     long long start = get_timestamp_ns();
     data_type x = 0x1;
     for (int i = 0; i < loop; i+=4) {
-    x = x OP ((arr[i] OP arr[i+1]) OP (arr[i+2] OP arr[i+3]));
+        x = x OP ((arr[i] OP arr[i+1]) OP (arr[i+2] OP arr[i+3]));
     }
     printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
     return 0;
 }
+
+int main(int argc, char *argv[]) {
+    int loop = (argc > 1) ? atoi(argv[1]) : LOOP;
+    data_type* arr = malloc(loop * sizeof(data_type));
+    if (arr == NULL) {
+        printf("malloc failed: %s\n", strerror(errno));
+        return -1;
+    }
+    for (int i = 0; i < loop; i++) {
+        arr[i] = rand() % loop;
+    }
+    base(arr, loop);
+    test0(arr, loop);
+    test1(arr, loop);
+    test2(arr, loop);
+    test3(arr, loop);
+    free(arr);
+    return 0;
+}
+
+/**
+
+int test0(data_type* arr, int loop) {
+    long long start = get_timestamp_ns();
+    data_type x = 0x1;
+    for (int i = 0; i < loop; i+=2) {
+        x = x OP arr[i];
+        x = x OP arr[i+1];
+    }
+    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
+    return 0;
+}
+
+
+int test1(data_type* arr, int loop) { // 累积变量变换
+    long long start = get_timestamp_ns();
+    data_type x = 0x1;
+    data_type y = 0x0;
+    for (int i = 0; i < loop; i+=2) {
+        x = x OP arr[i];
+        y = y OP arr[i+1];
+    }
+    x = x OP y;
+    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
+    return 0;
+}
+
+int test2(data_type* arr, int loop) {
+    long long start = get_timestamp_ns();
+    data_type x = 0x1;
+    for (int i = 0; i < loop; i+=2) {
+        x = x OP arr[i] OP arr[i+1];
+    }
+    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
+    return 0;
+}
+
+
+int test3(data_type* arr, int loop) { // 重新结合变换
+    long long start = get_timestamp_ns();
+    data_type x = 0x1;
+    for (int i = 0; i < loop; i+=2) {
+        x = x OP (arr[i] OP arr[i+1]);
+    }
+    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
+    return 0;
+}
+
  */
