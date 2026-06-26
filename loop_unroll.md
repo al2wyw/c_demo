@@ -76,6 +76,72 @@ loop_o3:     file format elf64-x86-64
   400ae3:       48 01 d3                add    %rdx,%rbx
   400ae6:       48 39 cf                cmp    %rcx,%rdi
   400ae9:       75 e5                   jne    400ad0 <test3+0x30>
+
+[johnnyleeli@VM-148-55-centos ~]$ ./loop_cache_o3 100000000
+L1=32768 bytes, sizeof(data_type)=8, LOOP=4096 elements (32768 bytes), REPEAT=24414, total ops=99999744
+ret:206974958425, time: 42002000
+ret:206974958425, time: 32493000
+ret:206974958425, time: 18442000
+ret:206974958425, time: 32532000
+ret:206974958425, time: 16965000
+
+[johnnyleeli@VM-148-55-centos ~]$ ./loop_mt_o3 100000000 8
+>>> total=100000000 elements (762.9 MB), nthreads=8, test_id=-1
+
+==================== base (threads=8, chunk=12500000) ====================
+[T7] base   ret:617815162020068, time: 11050000 ns, 9.05 GB/s
+[T6] base   ret:617888580916496, time: 11485000 ns, 8.71 GB/s
+[T2] base   ret:617779352322082, time: 17319000 ns, 5.77 GB/s
+[T1] base   ret:617732027435572, time: 17467000 ns, 5.73 GB/s
+[T0] base   ret:617905020049138, time: 17675000 ns, 5.66 GB/s
+[T3] base   ret:617782734793094, time: 17688000 ns, 5.65 GB/s
+[T4] base   ret:617674130253404, time: 17778000 ns, 5.62 GB/s
+[T5] base   ret:617892828093115, time: 17770000 ns, 5.63 GB/s
+[TOTAL] base wall: 18119000 ns, processed: 762.9 MB, aggregate: 44.15 GB/s
+
+==================== test0 (threads=8, chunk=12500000) ====================
+[T7] test0  ret:617815162020068, time: 10127000 ns, 9.87 GB/s
+[T6] test0  ret:617888580916496, time: 10501000 ns, 9.52 GB/s
+[T1] test0  ret:617732027435572, time: 16440000 ns, 6.08 GB/s
+[T2] test0  ret:617779352322082, time: 16528000 ns, 6.05 GB/s
+[T0] test0  ret:617905020049138, time: 16743000 ns, 5.97 GB/s
+[T3] test0  ret:617782734793094, time: 16781000 ns, 5.96 GB/s
+[T5] test0  ret:617892828093115, time: 16812000 ns, 5.95 GB/s
+[T4] test0  ret:617674130253404, time: 16846000 ns, 5.94 GB/s
+[TOTAL] test0 wall: 17038000 ns, processed: 762.9 MB, aggregate: 46.95 GB/s
+
+==================== test1 (threads=8, chunk=12500000) ====================
+[T7] test1  ret:617815162020068, time: 10030000 ns, 9.97 GB/s
+[T6] test1  ret:617888580916496, time: 10871000 ns, 9.20 GB/s
+[T1] test1  ret:617732027435572, time: 15961000 ns, 6.27 GB/s
+[T2] test1  ret:617779352322082, time: 16044000 ns, 6.23 GB/s
+[T3] test1  ret:617782734793094, time: 16135000 ns, 6.20 GB/s
+[T4] test1  ret:617674130253404, time: 16304000 ns, 6.13 GB/s
+[T5] test1  ret:617892828093115, time: 16312000 ns, 6.13 GB/s
+[T0] test1  ret:617905020049138, time: 16468000 ns, 6.07 GB/s
+[TOTAL] test1 wall: 16600000 ns, processed: 762.9 MB, aggregate: 48.19 GB/s
+
+==================== test2 (threads=8, chunk=12500000) ====================
+[T7] test2  ret:617815162020068, time: 9829000 ns, 10.17 GB/s
+[T6] test2  ret:617888580916496, time: 10078000 ns, 9.92 GB/s
+[T1] test2  ret:617732027435572, time: 15714000 ns, 6.36 GB/s
+[T2] test2  ret:617779352322082, time: 15771000 ns, 6.34 GB/s
+[T0] test2  ret:617905020049138, time: 15975000 ns, 6.26 GB/s
+[T3] test2  ret:617782734793094, time: 15982000 ns, 6.26 GB/s
+[T5] test2  ret:617892828093115, time: 16026000 ns, 6.24 GB/s
+[T4] test2  ret:617674130253404, time: 16034000 ns, 6.24 GB/s
+[TOTAL] test2 wall: 16234000 ns, processed: 762.9 MB, aggregate: 49.28 GB/s
+
+==================== test3 (threads=8, chunk=12500000) ====================
+[T6] test3  ret:617888580916496, time: 10049000 ns, 9.95 GB/s
+[T7] test3  ret:617815162020068, time: 9738000 ns, 10.27 GB/s
+[T1] test3  ret:617732027435572, time: 15680000 ns, 6.38 GB/s
+[T2] test3  ret:617779352322082, time: 15709000 ns, 6.37 GB/s
+[T0] test3  ret:617905020049138, time: 15866000 ns, 6.30 GB/s
+[T3] test3  ret:617782734793094, time: 15908000 ns, 6.29 GB/s
+[T4] test3  ret:617674130253404, time: 15924000 ns, 6.28 GB/s
+[T5] test3  ret:617892828093115, time: 16035000 ns, 6.24 GB/s
+[TOTAL] test3 wall: 16195000 ns, processed: 762.9 MB, aggregate: 49.40 GB/s
 ```
 
 # 深入分析：test0 vs test1 的性能差异
