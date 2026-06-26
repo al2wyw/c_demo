@@ -97,3 +97,59 @@ int main(int argc, char *argv[]) {
     free(arr);
     return 0;
 }
+
+/**
+int test0(data_type* arr, int loop) {
+    long long start = get_timestamp_ns();
+    data_type x = 0x1;
+    for (int i = 0; i < loop; i+=4) {
+        x = x OP arr[i];
+        x = x OP arr[i+1];
+        x = x OP arr[i+2];
+        x = x OP arr[i+3];
+    }
+    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
+    return 0;
+}
+
+
+int test1(data_type* arr, int loop) { // 累积变量变换
+    long long start = get_timestamp_ns();
+    data_type x = 0x1;
+    data_type y = 0x0;
+    data_type n = 0x0;
+    data_type m = 0x0;
+    for (int i = 0; i < loop; i+=4) {
+        x = x OP arr[i];
+        y = y OP arr[i+1];
+        n = n OP arr[i+2];
+        m = m OP arr[i+3];
+    }
+    x = x OP y;
+    n = n OP m;
+    x = x OP n;
+    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
+    return 0;
+}
+
+int test2(data_type* arr, int loop) {
+    long long start = get_timestamp_ns();
+    data_type x = 0x1;
+    for (int i = 0; i < loop; i+=4) {
+        x = x OP arr[i] OP arr[i+1] OP arr[i+2] OP arr[i+3];
+    }
+    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
+    return 0;
+}
+
+
+int test3(data_type* arr, int loop) { // 重新结合变换
+    long long start = get_timestamp_ns();
+    data_type x = 0x1;
+    for (int i = 0; i < loop; i+=4) {
+    x = x OP ((arr[i] OP arr[i+1]) OP (arr[i+2] OP arr[i+3]));
+    }
+    printf("ret:%d, time: %lld\n", x, get_timestamp_ns() - start);
+    return 0;
+}
+ */
