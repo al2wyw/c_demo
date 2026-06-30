@@ -16,6 +16,25 @@ void read_write(int* src, int* dst, int n) {
     }
 }
 
+#define CACHE_LINE_SIZE 64
+
+typedef struct {
+    char padding[CACHE_LINE_SIZE + 2];
+} data_t;
+
+void test_with_align(int check, int loop) {
+    data_t* data = aligned_alloc(CACHE_LINE_SIZE, sizeof(data_t));
+
+    int* p = (int*)&data->padding[0];
+    int* q = (int*)&data->padding[CACHE_LINE_SIZE - 2];
+
+    printf("%p, %p\n", p, q);
+    read_write( p, check == 1 ? q : p, loop);
+    printf("%d, %d\n", *p, *q);
+
+    free(data);
+}
+
 int main(int argc, char *argv[]) {
 
     int loop = (argc > 1) ? atoi(argv[1]) : 10000;
