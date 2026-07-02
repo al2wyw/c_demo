@@ -106,7 +106,7 @@ move rsp to r13
 call entry_point ****
 
 jmp _call_stub_return_address:
-    move rax to (rdi)
+    move rax to *rdi (the caller of call_stub retrieve result from memory not rax)
     revert op of call_stub
     ret
 
