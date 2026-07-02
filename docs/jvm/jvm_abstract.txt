@@ -29,7 +29,7 @@ save rsp to stack (last rsp)
 find method target via vtable (optional)
 jmp from_interpreted_entry address: ****
     leaveq by return inst (mov rbp to rsp, pop rbp)
-    pop r13, jmp *r13 by return inst (r13 is invoke_return_entry)
+    pop r13, jmp *r13 by return inst (r13 is invoke_return_entry or _call_stub_return_address)
 
 jmp invoke_return_entry address:
     move bcp local from stack to reg
