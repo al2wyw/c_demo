@@ -95,6 +95,22 @@ setup args to stack from reg or stack
 jmp from_interpreted_entry address ****
 
 
+** call_stub:
+enter
+sub rsp to save regs and vm objects
+move thread to r15
+move heapbase to r12
+setup args to stack
+move method to rbx
+move rsp to r13
+call entry_point ****
+
+jmp _call_stub_return_address:
+    move rax to (rdi)
+    revert op of call_stub
+    ret
+
+
 from_interpreted_entry 和 from_compiled_entry 都是 jmp 过去的，无论是解析和编译执行
 解析和编译最终都是调用LinkResolver::resolve_invoke
 方法调用是一个相对昂贵的操作，每次方法调用都需要经历查找、验证和跳转等步骤。为了优化这一过程，JVM引入了内联缓存(Inline Cache)技术
