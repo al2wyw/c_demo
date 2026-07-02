@@ -85,6 +85,14 @@ restore rsp and rbp
 jmp return address
 ...
 
+** from_compiled_entry is c2i adapter:
+move return address(tos) to rax
+save rsp to r13(r13 will be saved to stack in generate_fixed_frame)
+sub (args num)*8 from rsp
+push return address from rax
+
+setup args to stack from reg or stack
+jmp from_interpreted_entry address ****
 
 
 from_interpreted_entry 和 from_compiled_entry 都是 jmp 过去的，无论是解析和编译执行
