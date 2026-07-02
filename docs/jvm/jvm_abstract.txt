@@ -24,11 +24,12 @@ push invoke_return_entry address
 resolve method and class (optional)
 get receiver from cp cache
 test receiver
-save rsp to stack
+save rsp to stack (last rsp)
 
 find method target via vtable (optional)
 jmp from_interpreted_entry address: ****
     leaveq by return inst (mov rbp to rsp, pop rbp)
+    pop r13, jmp *r13 by return inst (r13 is invoke_return_entry)
 
 jmp invoke_return_entry address:
     move bcp local from stack to reg
@@ -103,7 +104,7 @@ move heapbase to r12
 setup args to stack
 move method to rbx
 move rsp to r13
-call entry_point ****
+call entry_point address **** (return address is _call_stub_return_address)
 
 jmp _call_stub_return_address:
     move rax to *rdi (the caller of call_stub retrieve result from memory not rax)
