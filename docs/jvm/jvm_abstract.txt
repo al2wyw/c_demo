@@ -111,7 +111,7 @@ jmp _call_stub_return_address:
     revert op of call_stub
     ret
 
-last_java_sp, last_java_fp, last_java_pc used to record last java frame when call native method(include vm method)
+last_java_sp, last_java_fp, last_java_pc used to record last java frame(int/comp) when call native method(include vm method)
 from_interpreted_entry 和 from_compiled_entry 都是 jmp 过去的，无论是解析和编译执行
 解析和编译最终都是调用LinkResolver::resolve_invoke
 方法调用是一个相对昂贵的操作，每次方法调用都需要经历查找、验证和跳转等步骤。为了优化这一过程，JVM引入了内联缓存(Inline Cache)技术
