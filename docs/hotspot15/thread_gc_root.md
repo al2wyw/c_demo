@@ -343,12 +343,47 @@ flowchart LR
 
 ### 5. RegisterMap 的累积更新
 
-`StackFrameStream::next()` 每跨一帧，会调用 `OopMapSet::update_register_map`，把当前帧 OopMap 中标记为 `callee_saved_value` 的项写入 `RegisterMap`。这样下一帧（更老的帧）扫描时，就能知道：
-- 我（caller）原本保存在 RBX 寄存器里的 oop，被被调用者保存到了它的栈帧某个槽里 —— 现在我就该去那个槽里读它。
+`StackFrameStream::next()` 每跨一帧，会调用 `OopMapSet::update_register_map`，把当前帧 OopMap 中标记为 `callee_saved_value` 的项写入 `RegisterMap`。这样下一帧扫描时，就能知道：
+- caller原本保存在 rdx 寄存器里的 oop，被callee保存到了它的栈帧某个槽里。
 
 这是"逐帧扫描"得以正确处理寄存器中 oop 的关键。
 
-### 6. 编译帧扫描可视化
+所以，`RegisterMap` 不是一次性构建的，而是**沿栈从顶向下"边走边填"**。每次调用 `frame::sender(&map)`(最后调用`OopMapSet::update_register_map`用当前帧的OopMap去更新`RegisterMap`)，都在把"这一层callee保存了哪些 callee-saved 寄存器、保存到栈上哪个位置"的信息累计进 map。
+
+栈遍历的起始帧通常是stub frame，通过`RegisterSaver::save_live_registers`生成当前帧的OopMap：
+
+```cpp
+map->set_callee_saved(STACK_OFFSET(rdx_off), rdx->as_VMReg());
+```
+
+假设线程在某个 **safepoint stub** 里被停下，它的调用栈（从顶向下）是：
+
+```
+frame#0  safepoint blob (RegisterSaver::save_live_registers 生成OopMap)   -> frame::sender(&map) -> RegisterMap填充完毕
+frame#1  compiled Java method A（rdx 里活着一个 oop）                       -> RegisterMap查找rdx对应的address
+frame#2  compiled Java method B
+...
+```
+
+### 6. HotSpot 里 `callee_saved_value` 的真正含义
+
+它**不是 ABI 意义上的 callee-saved**，而是 **"stub / runtime blob 主动保存了整个寄存器现场"** 的意思
+
+关键场景是 **safepoint blob / uncommon trap blob / deopt blob / exception blob** 等 **runtime stub**
+
+为什么 stub 需要这么做？ 原因是：
+- stub 不是caller通过 jmp 或 call 主动进来的，而是特殊场景控制流被劫持进来的，所以stub 一进来就 `push_CPU_state()` 把**所有**寄存器（GPR + FPR + flags）压栈进行保护，等控制流被返还caller时进行寄存器还原；
+- 这个"保存"动作是由 stub 帧完成的，位置也在 stub 帧里；
+- OopMap 用 `callee_saved_value` 类型来告诉 GC/栈遍历器：**"下层帧里 rdx 那个 oop 现在别去 CPU 的 rdx 找，去我这个 stub 帧里 rdx_off 处找"**。
+
+| | ABI callee-saved | HotSpot `callee_saved_value` |
+|---|---|---|
+| 谁定的 | ABI 静态约定 | 每个 stub 自己决定，写在 OopMap 里 |
+| 覆盖范围 | 固定的一小组（rbx/rbp/r12–r15） | 通常是**所有活寄存器**，含 caller-saved |
+| 恢复由谁负责 | 被调函数在 return 前恢复 | stub 在返回前 `pop_CPU_state()` 恢复 |
+| 在哪里能查询保存位置 | 靠 unwind info / 编译约定 | OopMap + RegisterMap |
+
+### 7. 编译帧扫描可视化
 
 ```mermaid
 sequenceDiagram

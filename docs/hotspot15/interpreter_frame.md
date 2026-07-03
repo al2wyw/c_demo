@@ -44,4 +44,11 @@
     intptr_t* unextended_sp = interpreter_frame_sender_sp();   // caller 的 -1 槽
     return frame(sender_sp, unextended_sp, link(), sender_pc());
     ```
-  - 之后还会调用 `adjust_unextended_sp()`（[frame_x86.cpp:372](/jdk15/src/hotspot/cpu/x86/frame_x86.cpp)）针对 deopt 场景再做修正。
+- 用途：
+  - `unextended_sp` 与 nmethod 中的 orig_pc 绑定：
+    ```
+    address* nmethod::orig_pc_addr(const frame* fr) {
+        return (address*) ((address)fr->unextended_sp() + _orig_pc_offset);
+    }
+    ```
+    deopt时会把当前帧栈上的返回地址改为`deopt_handler_begin()`，同时把原始的返回地址存在`_orig_pc_offset`，因为某些操作（is_at_call、pcDesc 查找、oopMap 查找、stack walking）都需要基于原始位置进行
