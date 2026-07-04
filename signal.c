@@ -17,7 +17,7 @@ jmp_buf env;
 
 long getThreadId() {
     pthread_t cur = pthread_self();
-    return cur->__sig;
+    return (long)cur;
 }
 
 void process_exit(int sig)

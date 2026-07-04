@@ -1,6 +1,11 @@
 //
 // Created by 李扬 on 2023/4/29.
 //
+// REG_RIP、REG_RSP 等枚举是 GNU 扩展
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <signal.h>
 #include <string.h>
 #include <pthread.h>
@@ -16,6 +21,15 @@ void get_format_time_ms(char *str_time);
 typedef void (*SigHandler)(int);
 typedef void (*SigAction)(int, siginfo_t*, void*);
 
+/**
+| 平台 | 架构 | 展开 |
+|------|------|------|
+| macOS | x86_64 | `uc_mcontext->__ss.__rip` |
+| macOS | arm64  | `uc_mcontext->__ss.__pc` |
+| Linux | x86_64 | `uc_mcontext.gregs[REG_RIP]` |
+| Linux | i386 | `uc_mcontext.gregs[REG_EIP]` |
+| Linux | arm64 | `uc_mcontext.pc`（不是 gregs 数组） |
+ */
 #ifdef __APPLE__
 #  define REG(l, m)  _ucontext->uc_mcontext->__ss.__##m
 #else
@@ -24,7 +38,7 @@ typedef void (*SigAction)(int, siginfo_t*, void*);
 
 long getThreadId() {
     pthread_t cur = pthread_self();
-    return cur->__sig;
+    return (long)cur;
 }
 
 void signalHandler(int signo, siginfo_t* siginfo, void* ucontext) {
@@ -58,8 +72,25 @@ SigAction installSignalHandler(int signo, SigAction action, SigHandler handler) 
     return oldsa.sa_sigaction;
 }
 
+void* run(void* arg)
+{
+    while (1) {
+        printf("start to trigger SIGSEGV in few seconds %lu\n", getThreadId());
+        sleep(3);
+        int a[3] = {0};
+        fprintf(stdout, "a[3] = %d\n", a[-11111111111111]);//trigger SIGSEGV
+    }
+}
+
 void test_signal_SIGSEGV() {
     installSignalHandler(SIGSEGV, signalHandler, NULL);
+    pthread_t thrd1;
+    if (pthread_create(&thrd1, NULL, run, NULL) != 0)
+    {
+        printf("thread error:%s \n", strerror(errno));
+        return;
+    }
+    pthread_detach(thrd1);
 }
 
 void wait_signal()
