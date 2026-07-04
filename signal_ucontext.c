@@ -41,6 +41,16 @@ long getThreadId() {
     return (long)cur;
 }
 
+void* run(void* arg)
+{
+    while (1) {
+        printf("start to trigger SIGSEGV in few seconds %lu\n", getThreadId());
+        sleep(3);
+        int a[3] = {0};
+        fprintf(stdout, "a[3] = %d\n", a[-11111111111111]);//trigger SIGSEGV
+    }
+}
+
 void signalHandler(int signo, siginfo_t* siginfo, void* ucontext) {
     char timeStamp[32];
     get_format_time_ms(timeStamp);
@@ -48,8 +58,9 @@ void signalHandler(int signo, siginfo_t* siginfo, void* ucontext) {
 
     ucontext_t* _ucontext = (ucontext_t*)ucontext;
 
-    uintptr_t pc = (uintptr_t)REG(RIP, rip);
-    fprintf(stdout, "PC: %p\n", (void*)pc);
+    fprintf(stdout, "PC: %p\n", (void*)REG(RIP, rip));
+    REG(RIP, rip) = (uintptr_t)run;
+    fprintf(stdout, "changed PC: %p\n", (void*)REG(RIP, rip));
 }
 
 SigAction installSignalHandler(int signo, SigAction action, SigHandler handler) {
@@ -70,16 +81,6 @@ SigAction installSignalHandler(int signo, SigAction action, SigHandler handler) 
         return NULL;
     }
     return oldsa.sa_sigaction;
-}
-
-void* run(void* arg)
-{
-    while (1) {
-        printf("start to trigger SIGSEGV in few seconds %lu\n", getThreadId());
-        sleep(3);
-        int a[3] = {0};
-        fprintf(stdout, "a[3] = %d\n", a[-11111111111111]);//trigger SIGSEGV
-    }
 }
 
 void test_signal_SIGSEGV() {
