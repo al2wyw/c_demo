@@ -59,6 +59,8 @@ void signalHandler(int signo, siginfo_t* siginfo, void* ucontext) {
     ucontext_t* _ucontext = ucontext;
 
     fprintf(stdout, "PC: %p\n", (void*)REG(RIP, pc));
+    fprintf(stdout, "RSP: %p\n", (void*)REG(RSP, sp));
+    fprintf(stdout, "RBP: %p\n", (void*)REG(RBP, fp));
     REG(RIP, pc) = (uintptr_t)run;
     fprintf(stdout, "changed PC: %p\n", (void*)REG(RIP, pc));
 }
