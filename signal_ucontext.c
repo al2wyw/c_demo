@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <ucontext.h>
+#include <sys/ucontext.h>
 #include <stdint.h>
 
 void get_format_time_ms(char *str_time);
@@ -56,11 +56,11 @@ void signalHandler(int signo, siginfo_t* siginfo, void* ucontext) {
     get_format_time_ms(timeStamp);
     fprintf(stdout, "%s caught %s signal %lu\n", timeStamp, strsignal(signo), getThreadId());
 
-    ucontext_t* _ucontext = (ucontext_t*)ucontext;
+    ucontext_t* _ucontext = ucontext;
 
-    fprintf(stdout, "PC: %p\n", (void*)REG(RIP, rip));
-    REG(RIP, rip) = (uintptr_t)run;
-    fprintf(stdout, "changed PC: %p\n", (void*)REG(RIP, rip));
+    fprintf(stdout, "PC: %p\n", (void*)REG(RIP, pc));
+    REG(RIP, pc) = (uintptr_t)run;
+    fprintf(stdout, "changed PC: %p\n", (void*)REG(RIP, pc));
 }
 
 SigAction installSignalHandler(int signo, SigAction action, SigHandler handler) {
