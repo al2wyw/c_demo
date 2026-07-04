@@ -75,6 +75,7 @@ void signal_sigsegv()
 {
     fprintf(stdout, "caught SIGSEGV signal %lu\n", getThreadId());
     siglongjmp(env,1);//try catch 的原型
+    fprintf(stdout, "siglongjmp %lu\n", getThreadId());//不会执行
 }
 
 
