@@ -426,12 +426,13 @@ Chunk使用碰撞指针进行内存分配
 thread stack area:
 red zone        <-  error
 yellow zone     <-  overflow exception
-reserved zone   <-  overflow exception, reserved annotation method can omit
+reserved zone   <-  overflow exception
 
 shadow zone     <-  logic area
 frame N         <-  rsp
 frame 1         <-  stack base, high address
 stack banging: rsp - shadow zone > guarded zone base
+reserved zone专为临界区代码（@ReservedStackAccess）设计，确保锁操作原子性，异常 deferred 至方法返回
 
 C1编译入口:
 参考 C1编译器概述
