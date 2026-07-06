@@ -433,7 +433,8 @@ frame N         <-  rsp
 frame 1         <-  stack base, high address
 stack banging: rsp - shadow zone > guarded zone base
 reserved zone专为临界区代码（@ReservedStackAccess）设计，确保锁操作原子性，异常 deferred 至方法返回。
-shadow zone看起来像是浪费掉了(stack banging)，但是防止栈一下子溢出到java guarded zone外面，vm无法继续处理。
+shadow zone看起来像是浪费掉了(stack banging)，但是防止栈一下子溢出到java guarded zone外面，vm无法继续处理。(用容量换可靠性)
+StackShadowPages 默认值是根据"最深的一次 VM 调用链所需的栈大小"来设定的。
 
 C1编译入口:
 参考 C1编译器概述
