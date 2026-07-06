@@ -423,6 +423,16 @@ Chunk -> 4种固定大小的Chunk -> alloc from ChunkPool or os::malloc(ChunkPoo
 4种固定大小: tiny, small, normal, large, 大于large都是非固定 (Arena::grow)
 Chunk使用碰撞指针进行内存分配
 
+thread stack area:
+red zone        <-  error
+yellow zone     <-  overflow exception
+reserved zone   <-  overflow exception, reserved annotation method can omit
+
+shadow zone     <-  logic area
+frame N         <-  rsp
+frame 1         <-  stack base, high address
+stack banging: rsp - shadow zone > guarded zone base
+
 C1编译入口:
 参考 C1编译器概述
 
