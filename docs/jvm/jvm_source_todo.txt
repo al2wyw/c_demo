@@ -79,10 +79,10 @@ deopt的过程
 
 class加载导致class hierarchy改变:
 1. SystemDictionary::add_to_hierarchy(class hierarchy改变) -> 进入安全点，VM_Deoptimize::doit -> Deoptimization::deoptimize_dependents
-2. Deoptimization::deoptimize_dependents -> Deoptimization::deoptimize -> frame::deoptimize -> push original return addr, patch the return pc to depot handler code
+2. Deoptimization::deoptimize_dependents -> Deoptimization::deoptimize -> frame::deoptimize -> set original pc of caller on stack, patch return address of callee to depot handler code
 3. depot handler code -> SharedRuntime::generate_deopt_blob   -> Deoptimization::fetch_unroll_info(return UnrollBlock*) -> Deoptimization::fetch_unroll_info_helper
                                                               -> Deoptimization::unpack_frames
-                                                              -> ret (original return addr)
+                                                              -> return to interpreter
 
 redefine class:
 1. JvmtiEnv::RedefineClasses or JvmtiEnv::RetransformClasses -> 进入安全点，VM_RedefineClasses::doit -> VM_RedefineClasses::redefine_single_class -> Deoptimization::deoptimize_dependents
