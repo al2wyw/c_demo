@@ -51,9 +51,16 @@ frequency_counter_overflow 返回 osr_nm（非 NULL）
     │
     ▼
 解释器汇编代码检测到返回值非 NULL：
-    ── SharedRuntime::OSR_migration_begin()  ← 迁移局部变量和 monitor
+    ── SharedRuntime::OSR_migration_begin()  ← 迁移局部变量和 monitor到c堆buf
+    ── pop ret addr                          ← sender如果是解释帧: invoke_return_entry 
     ── pop 解释器帧
-    ── jmp [rbx + osr_entry_point_offset]   ← 直接跳入 OSR 编译代码！
+    ── push ret addr
+    ── jmp [rbx + osr_entry_point_offset]    ← 直接跳入 OSR 编译代码！
+        │
+        └── build frame
+        └── restore args reg 
+        └── biz insts
+        └── ret to ret addr                  ← OSR 编译的代码结尾的ret！
 ```
 
 ### 关键代码证据
