@@ -265,6 +265,10 @@ patch_pc 后              │ deopt_handler│  PC_B        │ deopt_handler│
 低地址（栈顶，rsp 现在在这里）
 ```
 
+注意：
+- safepoint blob如果是**return poll**场景被劫持跳转进来的话创建的blob栈帧根本没有return address，safepoint blob处理完后直接代替原来的业务帧进行ret
+- safepoint blob如果是**poll**场景被劫持跳转进来的话创建blob栈帧第一个指令就是`push %rbx`(rbx是占位符，后续由saved_exception_pc填充)
+
 关键点：
 - **baz 自己不在栈顶**。它下面还压着 stub 帧 + VM C++ 帧。
 - **baz 的"pc"（也就是它被打断时正准备执行的下一条指令 PC_baz）此刻正好保存在 stub 栈帧的 return address 位置**——因为对 baz 来讲，safepoint poll 就是一次"call 到 stub"，stub 帧的 return address 就是 baz 的 pc。
