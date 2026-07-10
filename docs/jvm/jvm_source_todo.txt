@@ -139,6 +139,9 @@ Parse::do_put_xxx
 jdk15解释执行和编译执行底层都使用相同的membar函数实现内存屏障
 
 内联缓存优化CompiledIC: (https://wiki.openjdk.org/spaces/HotSpot/pages/11829292/Overview+of+CompiledIC+and+CompiledStaticCall)
+方法调用是一个相对昂贵的操作，每次方法调用都需要经历查找、验证和跳转等步骤。为了优化这一过程，JVM引入了内联缓存(Inline Cache)技术
+CompiledIC通过code patching把 caller(last frame) 的call resolve_opt_virtual_call改成(code patching)call target method entry address(UEP/VEP)，从而避免调用LinkResolver::resolve_invoke
+各种内联优化: 单态内联、双态内联、多态内联、守护内联(Guarded Inlining)或做内联缓存优化 (参考深入理解Java虚拟机)
 resolve_opt_virtual_call_C / resolve_virtual_call_C {
     callee_method = SharedRuntime::resolve_helper(thread, true, true / false, CHECK_NULL);
     thread->set_vm_result_2(callee_method());
