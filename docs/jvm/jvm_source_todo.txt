@@ -138,10 +138,10 @@ Parse::do_get_xxx
 Parse::do_put_xxx
 jdk15解释执行和编译执行底层都使用相同的membar函数实现内存屏障
 
+各种内联优化: 单态内联、双态内联、多态内联、守护内联(Guarded Inlining)或做内联缓存优化 (参考深入理解Java虚拟机)
 内联缓存优化CompiledIC: (https://wiki.openjdk.org/spaces/HotSpot/pages/11829292/Overview+of+CompiledIC+and+CompiledStaticCall)
 方法调用是一个相对昂贵的操作，每次方法调用都需要经历查找、验证和跳转等步骤。为了优化这一过程，JVM引入了内联缓存(Inline Cache)技术
-CompiledIC通过code patching把 caller(last frame) 的call resolve_opt_virtual_call改成(code patching)call target method entry address(UEP/VEP)，从而避免调用LinkResolver::resolve_invoke
-各种内联优化: 单态内联、双态内联、多态内联、守护内联(Guarded Inlining)或做内联缓存优化 (参考深入理解Java虚拟机)
+CompiledIC通过code patching把 caller(last frame) 的call resolve_opt_virtual_call改成call target method entry address(UEP/VEP)，从而避免调用LinkResolver::resolve_invoke
 resolve_opt_virtual_call_C / resolve_virtual_call_C {
     callee_method = SharedRuntime::resolve_helper(thread, true, true / false, CHECK_NULL);
     thread->set_vm_result_2(callee_method());
@@ -153,17 +153,19 @@ methodHandle SharedRuntime::resolve_helper(JavaThread *thread, bool is_virtual, 
         SharedRuntime::find_callee_info()
             SharedRuntime::find_callee_info_helper
                 LinkResolver::resolve_invoke
-        if (is_virtual) {
-            CompiledIC::compute_monomorphic_entry(callee_method, h_klass, is_optimized, static_bound, virtual_call_info,
-                             CHECK_(methodHandle()));
-            build CompiledIC and code patching CompiledIC;
-        } else {
-            CompiledStaticCall::compute_entry(callee_method, static_call_info);
-            build CompiledStaticCall and code patching CompiledStaticCall;
-        }
+        SharedRuntime::resolve_sub_helper_internal
+            if (is_virtual) {
+                CompiledIC::compute_monomorphic_entry(callee_method, h_klass, is_optimized, static_bound, virtual_call_info,
+                                 CHECK_(methodHandle()));
+                build CompiledIC and code patching CompiledIC;
+            } else {
+                CompiledStaticCall::compute_entry(callee_method, static_call_info);
+                build CompiledStaticCall and code patching CompiledStaticCall;
+            }
 UEP and c2i_unverified_entry(SharedRuntime::generate_i2c2i_adapters):
 check class type of call receiver
-jne ic_miss_blob -> megamorphic call -> using vtable dispatch
+jne ic_miss_blob -> call handle_wrong_method_ic_miss -> SharedRuntime::find_callee_info
+                                                     -> SharedRuntime::handle_ic_miss_helper_internal
 
 内联优化inline(CHA):
 C1:
@@ -176,12 +178,20 @@ GraphBuilder::invoke(HIR)
 LIRGenerator::do_Invoke
     __ call_opt_virtual
     __ call_virtual
+
 C2:
 Parse::do_call
     Compile::optimize_virtual_call
         ciMethod::find_monomorphic_target
     Compile::call_generator
-        InlineTree::try_to_inline
+        InlineTree::try_to_inline(单态内联)
+        type profile to get major receiver to inline(双态内联)(type checked)
+        invoke interface to find cha_monomorphic_target to inline(守护内联)(sub type guarded)
+        all failed to return DirectCallGenerator or VirtualCallGenerator(IC)
+    CallGenerator::generate(多种不同的CG)
+
+DirectCallGenerator: get_resolve_opt_virtual_call_stub
+VirtualCallGenerator: get_resolve_virtual_call_stub
 
 内存分配及回收:
 卡表、偏移表、写屏障/读屏障 (共同协作以解决跨代引用问题)
