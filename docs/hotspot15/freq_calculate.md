@@ -23,7 +23,7 @@ double _freq;   // Execution frequency (estimate)
 
 | 位置 | 写法 | 作用 |
 |-----|------|------|
-| `gcm.cpp:1599` | `_root_loop->_freq = 1.0;` | 方法入口环频率归一为 1（entry = 1 次/入口） |
+| `gcm.cpp:1599` | `_root_loop->_freq = 1.0;` | 方法入口环频率归一为 1 |
 | `gcm.cpp:1813` | `hd->_freq = 1.0;` | 循环 head 频率归一为 1（相对单次进入 loop） |
 | `gcm.cpp:2094` | `b->_freq += freq;` | `update_succ_freq` 中把前驱按 succ_prob 传播来的份额累加到后继 |
 | `gcm.cpp:2103` | `ch->_freq += freq;` | 累加到嵌套子循环 |
@@ -106,4 +106,4 @@ flowchart TD
 4. **回退路径**：当 MDO 未 mature 或对应 bci 没有 JumpData 时，会走 `branch_prediction` 的静态启发式（`PROB_STATIC_FREQUENT` 对回跳、`PROB_FAIR` 对等值判断等等）。也就是说 **`_freq` 也可能完全不依赖 JumpData**，只是在有 profile 的热路径上，JumpData 是最主要的数据源。
 
 ## 一句话总结
-succ block的freq是由其(多个)pred block的freq累加决定的，与pred block的freq值差不多的succ block的taken率更高
+succ block的freq是由其(多个)pred block的freq累加决定的，与pred block的freq值差不多的succ block的taken率更高(注意循环的head block的freq为1，由此推导出循环中其他block的freq)
