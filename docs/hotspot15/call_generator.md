@@ -2,7 +2,7 @@
 
 ## 一、基类 `CallGenerator` 的定位
 
-`CallGenerator` 是 **C2 前端"调用点 IR 生成"的策略基类**（Strategy Pattern）。位置在 [callGenerator.hpp](/Users/liyang/workspace/jdk15/src/hotspot/share/opto/callGenerator.hpp) 第 38 行：
+`CallGenerator` 是 **C2 前端"调用点 IR 生成"的策略基类**（Strategy Pattern）。位置在 [callGenerator.hpp](/jdk15/src/hotspot/share/opto/callGenerator.hpp) 第 38 行：
 
 ```cpp
 // The subclasses of this class handle generation of ideal nodes for
@@ -130,7 +130,7 @@ else do_java_comp
 
 ### （4）Intrinsic 相关
 
-#### `LibraryIntrinsic`（定义在 [library_call.cpp](/Users/liyang/workspace/jdk15/src/hotspot/share/opto/library_call.cpp)）
+#### `LibraryIntrinsic`（定义在 [library_call.cpp](/jdk15/src/hotspot/share/opto/library_call.cpp)）
 **作用**：手写代码把 JDK 里的特殊方法（`System.arraycopy`, `Math.sqrt`, `Unsafe.compareAndSwap`, `String.equals`, ...）**直接编译成一段定制的 Ideal 节点**，跳过字节码解析。
 
 - 继承 `InlineCallGenerator`，`is_intrinsic() == true`，`is_inline() == true`
@@ -220,7 +220,7 @@ classDiagram
 
 ## 五、CG 是怎么"组合"出来的？—— 调用点决策流程
 
-在 [doCall.cpp](/Users/liyang/workspace/jdk15/src/hotspot/share/opto/doCall.cpp) 的 `Compile::call_generator()` / `Parse::do_call()` 里，对同一个调用点会**层层套娃**地构造出一个复合 CG。典型模式：
+在 [doCall.cpp](/jdk15/src/hotspot/share/opto/doCall.cpp) 的 `Compile::call_generator()` / `Parse::do_call()` 里，对同一个调用点会**层层套娃**地构造出一个复合 CG。典型模式：
 
 ```mermaid
 flowchart TD
@@ -270,3 +270,128 @@ flowchart TD
 | `PredicatedIntrinsicGenerator` | runtime check 分流 intrinsic vs java | 部分 | 需要 CPU/参数条件才能用的 intrinsic |
 
 **基类 `CallGenerator` 就是 C2 处理"每一个调用点"的策略接口，子类通过组合与多态实现了 HotSpot 全部内联/去虚化/intrinsic/late-inline/uncommon-trap 的调用策略。**
+
+
+
+# `PredictedCallGenerator::_exact_check` 的语义差异
+
+`PredictedCallGenerator` 是同一个类，`_exact_check` 是一个开关，决定它在 fast path 前面插的**类型守卫（type guard）**用什么形式生成。两条路径最终都是"guard 通过 → 走 `_if_hit`；guard 失败 → 走 `_if_missed`"，但 guard 本身、cast 后的类型信息、以及适用场景都不一样。
+
+## 二、两个 helper 的实质区别
+
+### 1. `_exact_check == true` → `GraphKit::type_check_receiver`
+文件位置 [graphKit.cpp](/jdk15/src/hotspot/share/opto/graphKit.cpp) 第 2835 行。核心逻辑：
+
+```cpp
+Node* recv_klass = load_object_klass(receiver);       // 读 receiver 的 klass 指针
+Node* want_klass = makecon(tklass);
+Node* cmp = new CmpPNode(recv_klass, want_klass);     // 指针相等
+Node* bol = new BoolNode(cmp, BoolTest::eq);
+IfNode* iff = create_and_xform_if(control(), bol, prob, COUNT_UNKNOWN);
+...
+const TypeOopPtr* recv_xtype = tklass->as_instance_type();
+assert(recv_xtype->klass_is_exact(), "");             // ★ exact type
+Node* cast = new CheckCastPPNode(control(), receiver, recv_xtype);
+```
+
+- **guard 形式**：一条 `CmpP` + `BoolTest::eq` —— 直接**逐位比较 klass 指针**，只有精确等于 `_predicted_receiver` 才走 fast path
+- **fast path 上 receiver 的类型**：`klass_is_exact() == true`，也就是 sharpen 成 **exact type**（明确不再是任何子类）
+- **hit_prob**：由 caller 传入（一般来自 profile.receiver_prob(0)，或投机时的 1.0），会被下发给 IfNode，影响分支预测和后续 code layout
+
+### 2. `_exact_check == false` → `GraphKit::subtype_check_receiver`
+同文件第 2860 行：
+
+```cpp
+Node* want_klass = makecon(tklass);
+Node* slow_ctl = gen_subtype_check(receiver, want_klass);      // ★ subtype check
+const TypeOopPtr* recv_type = tklass->cast_to_exactness(false)
+                                    ->is_klassptr()
+                                    ->as_instance_type();       // ★ 非 exact
+Node* cast = new CheckCastPPNode(control(), receiver, recv_type);
+```
+
+- **guard 形式**：调用 `gen_subtype_check` —— 生成的是一整套 **`instanceof` 语义**的子类型检查（含 secondary_supers、display 快路径等），命中条件是 `receiver instanceof _predicted_receiver`
+- **fast path 上 receiver 的类型**：`cast_to_exactness(false)`，明确标记 **not exact**，因为通过 subtype check 只能得出"是它或它的某个子类"
+- **hit_prob**：`for_guarded_call` 里恒为 `PROB_ALWAYS`（因为通常配合 CHA/uncommon_trap 使用，miss 时直接 deopt）
+
+## 三、两个工厂对应的使用场景
+
+在 [doCall.cpp](/jdk15/src/hotspot/share/opto/doCall.cpp) 中：
+
+### `for_predicted_call`（`exact_check = true`）
+第 283、289 行，用于**基于 receiver type profile 的多态去虚化**：
+
+```
+if (recv.klass == monomorphic_klass_from_MDO)   // 精确等
+    inline hot_target
+else
+    virtual call  或  uncommon_trap
+```
+
+- 双态调用（bimorphic）时会嵌套两层 `for_predicted_call`，形成 `if (klass==k1) inline1; else if (klass==k2) inline2; else vcall`
+- 场景：MDO 告诉我们 receiver 具体是 `HashMap` / `ArrayList` 等**具体类**，进行**逐一比对**
+
+### `for_guarded_call`（`exact_check = false`）
+第 335 行，用于 **`invokeinterface` + CHA 单实现者**的去虚化：
+
+```cpp
+// declared_interface 只有一个实现者 singleton
+CallGenerator* miss_cg = for_uncommon_trap(..., Reason_class_check, Action_none);
+CallGenerator* cg      = for_guarded_call(holder, miss_cg, hit_cg);
+```
+
+- 因为 verifier 不检查 interface 参数，运行时 receiver 只保证"是个 Object"，必须靠 subtype check 兜底
+- 用 CHA 拿到 `cha_monomorphic_target->holder()` 作为 `_predicted_receiver`，只要 `receiver instanceof holder` 就允许调用内联的目标；不成立就 uncommon_trap 让解释器抛 `IncompatibleClassChangeError`
+- 因为有 CHA 依赖保证正确性（`dependencies()->assert_unique_concrete_method(...)`），命中概率视作 `PROB_ALWAYS`
+
+## 四、生成的 Ideal Graph 对比
+
+```mermaid
+flowchart TD
+    subgraph EXACT["exact_check = true (for_predicted_call)"]
+        A1[receiver] --> A2["load_object_klass"]
+        A2 --> A3["CmpP(recv_klass, want_klass)"]
+        A3 --> A4["BoolTest::eq"]
+        A4 --> A5["If (prob=hit_prob)"]
+        A5 -- True --> A6["CheckCastPP → exact type<br/>_if_hit.generate() (通常内联)"]
+        A5 -- False --> A7["_if_missed.generate()<br/>(vcall / 下一层 predicted / uncommon_trap)"]
+    end
+
+    subgraph SUB["exact_check = false (for_guarded_call)"]
+        B1[receiver] --> B2["gen_subtype_check<br/>(loop over super_check_offset / secondary_supers)"]
+        B2 -- pass --> B3["CheckCastPP → NOT exact type<br/>_if_hit.generate()"]
+        B2 -- fail --> B4["_if_missed.generate()<br/>(常见: uncommon_trap Reason_class_check)"]
+    end
+```
+
+## 五、几个容易忽略的细节
+
+1. **cast 后类型精度不同的下游影响**
+    - `exact=true` 拿到的 `casted_receiver` 是 exact type，后续的 `invokevirtual` 可以彻底去虚化为 static call，字段类型也能进一步 sharpen
+    - `exact=false` 只能证明"至少是 X 或其子类"，后续如果 X 是抽象类/接口，还需要额外手段（比如内联时又用 CHA 依赖）才能唯一确定方法
+
+2. **guard 代价**
+    - exact check 仅一条 `cmpq + je`，代价极小
+    - subtype check 走 `gen_subtype_check`，可能需要读 `_super_check_offset` 甚至遍历 `secondary_supers` 数组（对接口场景更常见），是**明显更贵**的路径。因此代码只在必须的场景才用（interface + CHA 单实现者）
+
+3. **hit_prob 与 IfNode 的分支预测提示**
+    - exact 路径把 profile 得到的真实命中率作为 prob 参数，直接影响 `IfNode` 的 `_prob` 字段，进而影响 block layout 与 loop 顶点选择
+    - guarded 路径固定 `PROB_ALWAYS`，因为语义上如果 miss 就 deopt，编译器可以放心把 miss 分支放到"冷区"
+
+4. **replace_in_map 的作用相同但影响域不同**
+    - 两条路径在 fast branch 都会 `kit.replace_in_map(receiver, casted_receiver)`，让后续所有引用 `receiver` 的地方看到 sharper type
+    - 但 sharpening 的强度天然由 `type_check_receiver` / `subtype_check_receiver` 里 CheckCastPP 的 `TypeOopPtr` 决定（是否 exact），进而决定后续 GVN/内联能否再进一步
+
+## 六、一句话总结
+
+| 维度 | `exact_check = true` (`for_predicted_call`) | `exact_check = false` (`for_guarded_call`) |
+|---|---|---|
+| guard 语义 | `receiver.klass == K`（**指针相等**） | `receiver instanceof K`（**子类型判断**） |
+| helper | `type_check_receiver` | `subtype_check_receiver` |
+| fast path receiver 类型 | **exact** instance type | **not exact** instance type |
+| guard 代价 | 极小（一次 CmpP + BoolTest::eq） | 较大（可能走 secondary_supers） |
+| hit_prob | 来自 caller（profile 或 1.0） | 恒为 `PROB_ALWAYS` |
+| miss 常见分支 | 二态时嵌套下一层，或退化为 vcall | 通常直接 `uncommon_trap` → deopt |
+| 触发场景 | receiver type profile 多态去虚化（mono/bi-morphic） | `invokeinterface` + CHA 唯一实现者的去虚化 |
+
+所以本质上 `_exact_check` 决定了：**用"klass 精确相等"的窄守卫（用于 profile 猜类），还是用"子类型兼容"的宽守卫（用于 CHA 兜底接口调用）**。前者是**基于概率的乐观优化**，后者是**基于 CHA 依赖的确定性优化**。
