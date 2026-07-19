@@ -39,17 +39,17 @@ instruction_address --> mov  <cached_value>, %rax   ; ← _value 指向的 mov�
              (CompiledICHolder*)
 ```
 
-| 状态 | `ic_destination` 指向                                             | `cached_value` 是什么 | 判定函数 |
-|---|-----------------------------------------------------------------|---|---|
-| **Clean**（未 resolve） | `SharedRuntime::get_resolve_virtual_call_stub()` 等 resolve stub | `NULL` (`non_oop_word`) | `is_clean()` = `dest == get_resolve_call_stub()` |
-| **Monomorphic → 编译代码** | 目标 nmethod 的 `entry_point()` / `verified_entry_point()`         | Receiver `Klass*` | `is_call_to_compiled()` = dest 落在 CodeCache 里 |
-| **Monomorphic → 解释器** | i2c adapter blob 入口                                             | `CompiledICHolder*`(Method+Klass) | `is_call_to_interpreted()` = dest 是 adapter blob，`is_icholder_call()` |
-| **Megamorphic** | vtable stub / itable stub                                       | vtable：NULL；itable：`CompiledICHolder*`(Klass+Klass) | `is_megamorphic()` = `VtableStubs::entry_point(dest) != NULL` |
-| **In-Transition** | 位于 `InlineCacheBuffer` 的 ICStub 里                               | 存在 ICStub 中 | `is_in_transition_state()` = `InlineCacheBuffer::contains(dest)` |
+| 状态 | `ic_destination` 指向                                                    | `cached_value` 是什么                                | 判定函数 |
+|---|------------------------------------------------------------------------|---------------------------------------------------|---|
+| **Clean**（未 resolve） | `SharedRuntime::get_resolve_virtual_call_stub()` 等 resolve stub        | `NULL` (`non_oop_word`)                           | `is_clean()` = `dest == get_resolve_call_stub()` |
+| **Monomorphic → 编译代码** | 目标 nmethod 的 `entry_point()` / `verified_entry_point()`                | Receiver `Klass*` /  `NULL`                       | `is_call_to_compiled()` = dest 落在 CodeCache 里 |
+| **Monomorphic → 解释器** | c2i adapter blob 入口:  `get_c2i_unverified_entry()` / `get_c2i_entry()` | `CompiledICHolder*`(Method+Klass)  /  `Method`           | `is_call_to_interpreted()` = dest 是 adapter blob，`is_icholder_call()` |
+| **Megamorphic** | vtable stub / itable stub (都来自VtableStubs)                                        | vtable：NULL；itable：`CompiledICHolder*`(Klass+Klass) | `is_megamorphic()` = `VtableStubs::entry_point(dest) != NULL` |
+| **In-Transition** | 位于 `InlineCacheBuffer` 的 ICStub 里                                      | 存在 ICStub 中                                       | `is_in_transition_state()` = `InlineCacheBuffer::contains(dest)` |
 
 注释里 `[1][2][3][4]` 分别是初次 fixup、编译目标出现、目标 nmethod 重编译、IC miss 走 megamorphic。**没有"Megamorphic → Monomorphic"的边**：一旦成为多态的，就不可逆。
 
-另外还有一个**优化虚调用（optimized virtual call）**特殊分支：`_is_optimized=true` 时其实没有 value cell（编译期已经能静态绑定），退化成一个可 patch 的 `CompiledDirectStaticCall`，永远只在 Clean ↔ Monomorphic 之间切换。
+另外还有一个**优化虚调用（optimized virtual call）**特殊分支(编译代码)：`_is_optimized=true` 时其实没有 value cell（编译期已经能静态绑定），退化成一个可 patch 的 `CompiledDirectStaticCall`，永远只在 Clean ↔ Monomorphic 之间切换。
 
 ## 三、"MT-safe patching" 的根本困难
 
@@ -116,7 +116,7 @@ if (!InlineCacheBuffer::create_transition_stub(this, holder, info.entry())) {
   return false;
 }
 ```
-- 此时 `info.entry() == method->get_c2i_unverified_entry()`（i2c adapter 的**未校验入口**）
+- 此时 `info.entry() == method->get_c2i_unverified_entry()`（c2i adapter 的**未校验入口**）
 - `cached_value` 必须是 `CompiledICHolder*`（含 method + expected klass），解释器 stub 才知道"来的这个 receiver 该不该走这个 Method"，进行 klass 校验
 - **必须走 ICStub**：因为要同时改 dest 和 value，是 unsafe 转换
 
@@ -137,7 +137,7 @@ if (!safe) {
   }
 }
 ```
-- **从 Clean → Monomorphic 是 MT-safe 的**：因为 clean 状态下 cache=NULL，先写 cache（klass），再切 dest，从"IC miss 处理器 → verified entry"，另一线程即使中间穿越，也只是走到旧的 resolve stub，语义正确
+- **从 Clean → Monomorphic 是 MT-safe 的**：因为 clean 状态下先写 dest，再切 cache（klass），中间状态会导致type check失败走"IC miss 处理器 → verified entry"进行兜底。
 - 已经 monomorphic 想再切一个新 klass？属于 `[3]` 边——**注释里明确说只允许改 dest 不改 klass**：因为 nmethod 被替换（重编译）时目标变了，但 receiver klass 不变；如果需要改 klass，必须先 clean
 
 从 `compute_monomorphic_entry` 看，`CompiledICInfo` 提供的 3 种 `entry` 变体已经对应了这里的分支：
@@ -145,8 +145,8 @@ if (!safe) {
 | `info` 设置 | 目标 | cached_value          |
 |---|---|-----------------------|
 | `set_compiled_entry(entry, klass, optimized)` | nmethod entry_point | Klass*（非 optimized 时） |
-| `set_interpreter_entry(c2i_entry, method)` | i2c adapter | Method*(optimized 时)      |
-| `set_icholder_entry(c2i_unverified, holder)` | i2c 未校验入口 | CompiledICHolder*     |
+| `set_interpreter_entry(c2i_entry, method)` | c2i adapter | Method*(optimized 时)      |
+| `set_icholder_entry(c2i_unverified, holder)` | c2i 未校验入口 | CompiledICHolder*     |
 
 ## 六、`set_to_megamorphic` 实现分析
 
