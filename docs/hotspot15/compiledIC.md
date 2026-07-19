@@ -92,7 +92,7 @@ bool CompiledIC::set_to_clean(bool in_use) {
 ```
 
 要点：
-- **回到 clean**：dest 恢复到 `SharedRuntime::get_resolve_{virtual|opt_virtual|static}_call_stub()`；`cached_value` 置 NULL
+- **回到 clean**：dest 恢复到 `SharedRuntime::get_resolve_{virtual|opt_virtual|static}_call_stub()`；`cached_value` 置 NULL(使用 non_oop_word() 作为 cache NULL 哨兵，避免和内存的NULL语义混淆)
 - **判定 safe 的四种情形**任一成立就直接原地 patch，否则走 ICStub
 - 关键使用场景：类卸载、nmethod 变 zombie、bytecode 修改、IC miss 时先清理再重装
 
@@ -139,6 +139,7 @@ if (!safe) {
 ```
 - **从 Clean → Monomorphic 是 MT-safe 的**：因为 clean 状态下先写 dest，再切 cache（klass），中间状态会导致type check失败走"IC miss 处理器 → verified entry"进行兜底。
 - 已经 monomorphic 想再切一个新 klass？属于 `[3]` 边——**注释里明确说只允许改 dest 不改 klass**：因为 nmethod 被替换（重编译）时目标变了，但 receiver klass 不变；如果需要改 klass，必须先 clean
+- set_destination_mt_safe 通过cache line对齐保证 dest 写入的原子性，避免半写入割裂
 
 从 `compute_monomorphic_entry` 看，`CompiledICInfo` 提供的 3 种 `entry` 变体已经对应了这里的分支：
 
