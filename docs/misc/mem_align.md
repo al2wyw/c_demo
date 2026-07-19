@@ -164,8 +164,51 @@ struct s {
     char pad[60];
     uint64_t counter;   // 偏移60，跨过64字节cache line边界
 };
-__sync_fetch_and_add(&s.counter, 1);   // x86触发split lock #AC
+__sync_fetch_and_add(&s.counter, 1);   // x86触发split lock #AC , x86 开启 split_lock_detect=warn 早发现 split lock
 ```
+---
+
+## 七、内核处理流程总览
+
+```mermaid
+sequenceDiagram
+    participant U as 用户程序
+    participant H as CPU硬件
+    participant V as 异常向量
+    participant K as 内核处理函数
+    participant S as 信号机制
+
+    U->>H: 执行非对齐load/store
+    H->>H: 检测对齐违规
+    H->>V: 触发同步异常<br/>(Data Abort / #AC)
+    V->>V: 保存上下文<br/>切到内核栈
+    V->>K: 调用arch对应处理<br/>(do_alignment_fault等)
+    
+    alt 内核态出错
+        K->>K: oops/panic<br/>BUG_ON
+    else 用户态出错-架构支持模拟(ARMv7)
+        K->>K: 解码指令
+        K->>K: 拆分为对齐访问
+        K->>U: PC+=4 返回继续执行
+    else 用户态出错-不模拟
+        K->>S: force_sig_fault<br/>SIGBUS, BUS_ADRALN
+        S->>U: 投递SIGBUS
+        U->>U: 默认动作: core dump
+    end
+```
+
+---
+
+## 九、与 Page Fault / Bus Error 的区别
+
+| 故障类型 | 触发原因 | 信号 | si_code |
+|---------|---------|------|---------|
+| **Alignment Fault** | 地址不对齐 | SIGBUS | `BUS_ADRALN` |
+| **Page Fault (无效)** | 地址未映射 | SIGSEGV | `SEGV_MAPERR` |
+| **Page Fault (权限)** | 写只读页等 | SIGSEGV | `SEGV_ACCERR` |
+| **Bus Error (硬件)** | 内存控制器错误 | SIGBUS | `BUS_ADRERR` |
+| **Bus Error (mmap文件被截短)** | 访问已不存在的文件页 | SIGBUS | `BUS_ADRERR` |
+
 ---
 
 ## 十二、一句话总结
