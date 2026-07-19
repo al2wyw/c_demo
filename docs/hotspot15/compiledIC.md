@@ -49,7 +49,7 @@ instruction_address --> mov  <cached_value>, %rax   ; ← _value 指向的 mov�
 
 注释里 `[1][2][3][4]` 分别是初次 fixup、编译目标出现、目标 nmethod 重编译、IC miss 走 megamorphic。**没有"Megamorphic → Monomorphic"的边**：一旦成为多态的，就不可逆。
 
-另外还有一个**优化虚调用（optimized virtual call）**特殊分支(编译代码)：`_is_optimized=true` 时其实没有 value cell（编译期已经能静态绑定），退化成一个可 patch 的 `CompiledDirectStaticCall`，永远只在 Clean ↔ Monomorphic 之间切换。
+另外还有一个**优化虚调用（optimized virtual call）**特殊分支(针对编译代码)：`_is_optimized=true` 时其实没有 value cell（编译期已经能静态绑定，生成的代码不含`_value`对应的move指令），退化成一个类似 `CompiledDirectStaticCall`，永远只在 Clean ↔ Monomorphic 之间切换。
 
 ## 三、"MT-safe patching" 的根本困难
 
