@@ -1,3 +1,6 @@
+address bcp = constMethod()->code_base() + bci;
+Code (*bcp) = Bytecodes::_ldc;
+
 第1篇-关于运行时，开篇说的简单些
 不过由于Java方法与C/C++函数的调用约定不同，所以并不能直接调用，需要JavaCalls::call()这个函数辅助调用
 从C/C++方法中调用的一些Java方法主要有：
