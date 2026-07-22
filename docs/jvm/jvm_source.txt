@@ -1,5 +1,5 @@
 address bcp = constMethod()->code_base() + bci;
-Code (*bcp) = Bytecodes::_ldc;
+Bytecodes::Code (*bcp) = Bytecodes::_ldc;
 
 第1篇-关于运行时，开篇说的简单些
 不过由于Java方法与C/C++函数的调用约定不同，所以并不能直接调用，需要JavaCalls::call()这个函数辅助调用
@@ -692,10 +692,13 @@ string_at_put会根据表示字符串的Symbol实例创建出表示字符串的o
 // 通过本地变量表索引从本地变量表中加载值到%eax中，
 // %eax中存储的就是栈顶缓存值，所以不需要压入栈内
 0x00007fffe1028df3: mov (%r14,%rbx,8),%eax
- cur        next      rewrite
+ cur        next             rewrite cur to
 iload ->    iload
       ->    fast_iload   ->  fast_iload2
       ->    其他          ->  fast_iload
+iload: 比正常的iload多了很多rewrite的判断
+fast_iload: 就是正常的iload
+fast_iload2: 连续2个iload进行汇编指令合并，会跳过下一个iload，避免字节码派发的payload
 
 第22篇-字节码运算指令
 空白
