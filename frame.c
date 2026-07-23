@@ -35,6 +35,9 @@
  * set: sete(setz) D -> D = 1 when comp is equal else D = 0(movb ZF D)(把内存上的单字节或寄存器的高/低8bit置为0或1)
  * jmp: jmpg label -> jump to label when comp is greater
  * cmov: cmovg S D -> D = S when comp is greater
+ * 跳转: (jmp/call类似)
+ * 直接跳转: jmp addr
+ * 间接跳转: jmp *%rax (跳转到rax中的地址) or jmp *(%rax) (跳转到rax中地址所指向的地址)
  *
  * 开启优化-O后非常随意，直接把调用者保护寄存器的值保存到其他的寄存器里而不是内存
  * gdb: b main; b main.c:10; b *addr; delete/enable/disable 1; x/nfu $rbp-4 f=o,x,u,s,i(str,inst) u=b,h,w,g; disass main; disass /r 0x8048000, 0x8048000+200; layout asm; ctl+x then a; focus cmd;;
