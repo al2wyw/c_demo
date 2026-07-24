@@ -1,5 +1,7 @@
 # Linux x86-64 进程启动到 main 调用的完整流程分析
 
+**libc实现了动态加载和链接相关功能，参与到程序运行中，binutils中的ar和ld实现了静态加载和链接相关功能，参与到gcc编译过程中**
+
 ## 一、总体架构：三个关键角色
 
 在 ELF 可执行文件中，从内核 `execve` 加载到 `main` 执行，涉及三层协作：
@@ -119,7 +121,7 @@ STATIC int LIBC_START_MAIN (int (*main) (int, char **, char **),   // rdi ← 0x
 
 这是**现代 GCC 的一个变化**。看似矛盾：明明有 `_init` 和 `_fini`，为什么 `_start` 传 NULL？
 
-原因是：**新版工具链已经改用 `.init_array` / `.fini_array` 机制**，构造/析构函数由 `__libc_csu_init` 或直接由 `__libc_start_main` 通过遍历 `.init_array` 段调用，`_init` / `_fini` 只作为兼容性存在。你在反汇编里看到的 `__do_global_dtors_aux`、`frame_dummy` 就是通过 `.init_array` 挂载的入口。
+原因是：**新版工具链**，动态链接器 ld-linux.so 在把控制权交给 `_start` 之前通过调用 `_dl_init` → `call_init`（该函数内部调用 `_init` 并遍历 `.init_array`），`_init` / `_fini` 只作为兼容性存在。
 
 在**较老的实现**（如 glibc-2.17 典型情况）中，`_start` 会把 `__libc_csu_init`（该函数内部调用 `_init` 并遍历 `.init_array`）传给 `rcx`，把 `__libc_csu_fini` 传给 `r8`。
 
@@ -191,47 +193,7 @@ LIBC_START_MAIN (int (*main) (int, char **, char **),
    call __libc_start_main@PLT
    ```
    链接时，链接器把 `main` 符号解析为 `0x400479`，写入到 `_start` 的指令里。
-4. **运行时**：CPU 执行到 `mov $0x400479,%rdi` 时，`main` 的地址已经作为立即数硬编码在指令流中，直接进 `rdi` 寄存器。
-5. **`__libc_start_main` 通过函数指针 `main` 参数调用**：
-   ```c
-   result = main (argc, argv, __environ);
-   ```
 
 所以 **`__libc_start_main` 只是一个"通用启动器"，谁把 `main` 地址传给它，它就调用谁**。这也是为什么你可以用 `gcc -e mymain` 改变入口函数——本质上是让链接器把 "`_start` 里传给 `__libc_start_main` 的那个符号" 改成 `mymain`。
-
----
-
-## 五、完整时序图
-
-```mermaid
-sequenceDiagram
-    participant K as 内核 execve
-    participant LD as ld-linux.so
-    participant S as _start (0x400330)
-    participant LSM as __libc_start_main
-    participant INIT as _init / .init_array
-    participant M as main (0x400479)
-    participant FINI as _fini / atexit 链
-    participant E as exit
-
-    K->>LD: 加载 ELF，映射段，跳到解释器
-    LD->>LD: 处理动态库依赖、重定位、GOT/PLT
-    LD->>S: 跳到 e_entry = _start，rdx=rtld_fini
-    S->>S: 清 ebp、整理 argc/argv、对齐栈
-    S->>LSM: call __libc_start_main(<br/>main=0x400479, argc, argv,<br/>init, fini, rtld_fini, stack_end)
-    LSM->>LSM: _dl_aux_init / apply_irel
-    LSM->>LSM: __pthread_initialize_minimal
-    LSM->>LSM: 设置 stack canary
-    LSM->>LSM: __cxa_atexit(rtld_fini)
-    LSM->>LSM: __cxa_atexit(fini)
-    LSM->>INIT: (*init)(argc,argv,envp)<br/>内部触发 _init 和 .init_array
-    INIT-->>LSM: 全局构造完成
-    LSM->>M: main(argc, argv, envp)
-    M-->>LSM: return result
-    LSM->>E: exit(result)
-    E->>FINI: 逆序调用 atexit 链<br/>（含 fini → _fini、.fini_array）
-    FINI-->>E: 清理完毕
-    E->>K: _exit 系统调用
-```
 
 ---
