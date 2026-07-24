@@ -197,3 +197,23 @@ LIBC_START_MAIN (int (*main) (int, char **, char **),
 所以 **`__libc_start_main` 只是一个"通用启动器"，谁把 `main` 地址传给它，它就调用谁**。这也是为什么你可以用 `gcc -e mymain` 改变入口函数——本质上是让链接器把 "`_start` 里传给 `__libc_start_main` 的那个符号" 改成 `mymain`。
 
 ---
+
+```text
+caller: call 0x400310
+
+Disassembly of section .plt:
+
+0000000000400300 <puts@plt-0x10>:
+400300:       ff 35 ea 2c 00 00       push   0x2cea(%rip)        # 402ff0 <_GLOBAL_OFFSET_TABLE_+0x8>
+400306:       ff 25 ec 2c 00 00       jmp    *0x2cec(%rip)        # 402ff8 <_GLOBAL_OFFSET_TABLE_+0x10>
+40030c:       0f 1f 40 00             nopl   0x0(%rax)
+
+0000000000400310 <puts@plt>:
+400310:       ff 25 ea 2c 00 00       jmp    *0x2cea(%rip)        # 403000 <puts@GLIBC_2.2.5>
+400316:       68 00 00 00 00          push   $0x0
+40031b:       e9 e0 ff ff ff          jmp    400300 <_init+0x20>
+
+403000: 0x400316
+402ff8: _dl_runtime_resolve_xsavec -> _dl_fixup -> _dl_lookup_symbol_x
+                                                -> elf_machine_fixup_plt -> 403000: the real addr of puts@plt
+```
