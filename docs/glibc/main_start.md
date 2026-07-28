@@ -198,6 +198,7 @@ LIBC_START_MAIN (int (*main) (int, char **, char **),
 
 ---
 
+glibc 中的 trampoline (蹦床) 是动态链接器（ld.so）中用于延迟绑定（lazy binding）的汇编跳转桩代码：
 ```text
 caller: call 0x400310
 
