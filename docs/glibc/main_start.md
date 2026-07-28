@@ -218,3 +218,5 @@ Disassembly of section .plt:
 402ff8: _dl_runtime_resolve_xsavec -> _dl_fixup -> _dl_lookup_symbol_x
                                                 -> elf_machine_fixup_plt -> 403000: the real addr of puts@plt
 ```
+
+e_entry (入口点)是绝对地址或偏移量‌：在非 PIE 程序中，e_entry 是在静态编译链接时指定的绝对虚拟地址，基址为0；在 PIE/共享库中，e_entry 只是相对于动态加载时随机分配（ASLR）的基址的偏移量，通过查看 /proc/<pid>/maps 可得基址。 基址通常指 ELF 中第一个 PT_LOAD 段内存页对齐后的起始地址。
