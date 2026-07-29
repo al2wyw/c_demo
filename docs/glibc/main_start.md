@@ -9,7 +9,7 @@
 ```
 内核 execve
     ↓
-动态链接器 ld-linux.so (若为动态链接)
+动态链接器 ld.so (若为动态链接)
     ↓
 _start (可执行文件 .text 段的入口)
     ↓
@@ -220,3 +220,93 @@ Disassembly of section .plt:
 ```
 
 e_entry (入口点)是绝对地址或偏移量‌：在非 PIE 程序中，e_entry 是在静态编译链接时指定的绝对虚拟地址，基址为0；在 PIE/共享库中，e_entry 只是相对于动态加载时随机分配（ASLR）的基址的偏移量，通过查看 /proc/<pid>/maps 可得基址。 基址通常指 ELF 中第一个 PT_LOAD 段内存页对齐后的起始地址。
+
+---
+
+## `dl_main` 从哪里被调用
+
+`dl_main` 是动态链接器 `ld.so` 的"业务主函数"，但它并不是由 CPU 直接跳到的入口。它以**函数指针**的形式被更底层的启动流程回调。
+
+
+### 二、真正调用发生在 `_dl_sysdep_start`
+
+`_dl_sysdep_start` 是与操作系统相关的桥接函数，Linux 平台在 sysdeps/unix/sysv/linux/dl-sysdep.c：
+
+```c
+// sysdeps/unix/sysv/linux/dl-sysdep.c:99-142
+_dl_sysdep_start (void **start_argptr,
+                  void (*dl_main) (const ElfW(Phdr) *, ...))
+{
+  struct dl_main_arguments dl_main_args;
+  _dl_sysdep_parse_arguments (start_argptr, &dl_main_args);
+  ...
+  (*dl_main) (dl_main_args.phdr, dl_main_args.phnum,
+              &dl_main_args.user_entry, GLRO(dl_auxv));
+  return dl_main_args.user_entry;
+}
+```
+
+它先从内核压给动态链接器的 **初始栈帧** 里解析出 `argc/argv/envp/auxv/phdr/phnum` 这些信息，然后通过函数指针 `(*dl_main)(...)` 回调回 `elf/rtld.c` 里的 `dl_main`。
+
+### 三、更上一层的启动链路（从 `_start` 到 `dl_main`）
+
+整个动态链接器启动路径如下：
+
+```mermaid
+flowchart TD
+    A["内核 execve<br/>把控制权交给 PT_INTERP 指定的 ld.so"] --> B["ld.so ELF 入口 _start<br/>sysdeps/x86_64/dl-machine.h RTLD_START"]
+    B -->|"仅做寄存器/栈准备"| C["_dl_start<br/>elf/rtld.c:517"]
+    C -->|"完成 ld.so 自身的自举重定位"| D["_dl_start_final<br/>elf/rtld.c:448/451"]
+    D -->|"取 &dl_main"| E["_dl_sysdep_start<br/>sysdeps/unix/sysv/linux/dl-sysdep.c:99"]
+    E -->|"解析 auxv/argv/envp<br/>然后 (*dl_main)(...)"| F["dl_main<br/>elf/rtld.c:1348<br/>【真正的动态链接主流程】"]
+```
+
+要点：
+- `_start`（汇编入口）→ `_dl_start`（C，完成 ld.so 自身的引导重定位，此时还不能用 GOT）→ `_dl_start_final`（GOT 可用后接手）→ `_dl_sysdep_start`（负责解析内核栈参数）→ **`dl_main`**（业务主流程）。
+- 之所以要拆得这么细，是因为 `_dl_start` 阶段 GOT 还没搞好，不能调用任何间接跳转的库函数；后半段一定要放到独立函数里避免编译器把 GOT 访问提前。
+
+### 四、`dl_main` 内部触发 `DT_NEEDED` 依赖加载
+
+回到你选中的 `dl_main` 函数体，加载主程序 `DT_NEEDED` 依赖的调用点在 **elf/rtld.c 第 1971 行**：
+
+```c
+// elf/rtld.c:1966-1975
+/* Load all the libraries specified by DT_NEEDED entries.  If LD_PRELOAD
+   specified some libraries to load, these are inserted before the actual
+   dependencies in the executable's searchlist for symbol resolution.  */
+{
+  RTLD_TIMING_VAR (start);
+  rtld_timer_start (&start);
+  _dl_map_object_deps (main_map, preloads, npreloads,
+                       state.mode == rtld_mode_trace, 0);
+  rtld_timer_accum (&load_time, start);
+}
+```
+
+- `main_map` 是主程序（可执行文件）已建立的 `link_map`。
+- `preloads/npreloads` 是 `LD_PRELOAD` 指定的库，会被插到 `DT_NEEDED` 之前。
+- `_dl_map_object_deps` 会**广度优先递归**处理 `DT_NEEDED`：对每个尚未加载的依赖调用 `_dl_map_object`（`mmap` 段、建立 `link_map`），然后继续处理该依赖的 `DT_NEEDED`，直到搜索列表 `r_list` 完整建立。
+
+之后 `dl_main` 会继续：
+1. 处理 TLS：`_dl_determine_tlsoffset`；
+2. 分配 TCB：`_dl_allocate_tls_storage`；
+3. 对整个依赖列表做 `_dl_relocate_object`（真正的重定位，此时 PLT 若为惰性绑定，会预先写入到 `_dl_runtime_resolve` 的跳板 —— 这就衔接到你之前问过的 `_dl_fixup` 路径）；
+4. 调用各 DSO 的 `.init_array` / `.init`；
+5. 最后返回用户程序入口 `user_entry`，由 `_start` 的汇编尾部跳转过去，正式进入 `main`。
+
+___
+
+dlopen动态加载库过程：
+```mermaid
+flowchart TD
+A["用户代码<br/>dlopen(file, mode)"] --> B["libc.so: ___dlopen<br/>dlfcn/dlopen.c"]
+B --> C["dlopen_implementation<br/>+ _dlerror_run 包裹"]
+C --> D["dlopen_doit"]
+D -->|"函数指针跳转"| E["GLRO(dl_open)<br/>= ld.so 里的 _dl_open"]
+E --> F["_dl_open<br/>elf/dl-open.c:824<br/>加锁/确定 namespace"]
+F --> G["_dl_catch_exception → dl_open_worker"]
+G --> H["_dl_map_object<br/>打开ELF, mmap各段"]
+H --> I["_dl_map_object_deps<br/>递归加载 DT_NEEDED"]
+I --> J["_dl_relocate_object<br/>重定位 (关联 _dl_fixup 惰性绑定)"]
+J --> K["call_dl_init<br/>调用 .init / .init_array"]
+```
