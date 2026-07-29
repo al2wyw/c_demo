@@ -668,3 +668,32 @@ flowchart LR
 | `-d 30` 限制采样时长 | always-on 变 on-demand            |
 
 实测在 1000 线程的 Java Web 服务上，**默认 wall + BATCH** 的稳态 CPU 开销通常在 1–2%；只有把它当成 `--nobatch` 跑或者把 interval 强行拉到 100 μs，才会出现你担心的"机器被打死"的情况。
+
+---
+
+## profiler 通过JVMti agent方式启动
+
+Agent_OnLoad 方式启动调用`VM::init`时会注册`VM::VMInit`到`jvmtiEventCallbacks.VMInit`，`VM::VMInit`会调用`Profiler::instance-run args`，而Agent_OnAttach方式需要额外显式调用`Profiler::instance-run args`，因为已经过了VMInit时期。
+
+```mermaid
+flowchart TD
+A[Agent_OnAttach] --> B[VM::init vm, true]
+B --> C[VM::ready]
+C --> D[Profiler::setupSignalHandlers]
+A --> E[Profiler::instance-run args]
+E --> F[runInternal → start → 各 engine 的 start]
+F --> G[MallocTracer::initialize → installHooks<br/>NativeLockTracer::initialize → installHooks]
+G --> H[patchLibraries：把 <b>所有已加载库</b><br/>的 GOT 中 malloc/free/pthread_mutex_lock 等改成 hook]
+H --> I[后续 dlopen 加载新库时<br/>由 dlopen_hook 增量补丁]
+```
+
+## 剩什么"真漏洞"？
+
+严格说，`Hooks::patchLibraries` 靠的是 `updateSymbols` → `Symbols::parseLibraries` 扫描 `/proc/self/maps`，然后**修改各库 GOT/PLT 中对 `malloc/dlopen/pthread_*` 的引用**。这套方案有几个先天限制：
+
+1. **静态链接的库**：如果某个库把 libc 静态链接进去了（没有 GOT 表项），无法 patch。
+2. **直接通过函数指针调用**：某个库拿 `dlsym` 存了原始 `malloc` 指针，然后一直用它，也逃出 hook。
+3. **`RTLD_DEEPBIND` / `dlmopen`**：链接命名空间隔离，可能绕过 GOT 补丁。
+4. **窗口期**：JVM 从加载 profiler 库到 `Hooks::init(true)` 之间，如果有别的线程正在 `dlopen` 一个新库，理论上存在短暂的竞态；但 `_patched_libs` 的游标模型会在下一次 `patchLibraries` 时补上，所以最多"漏几个 malloc 事件"，不会永久错过。
+
+这些也是社区 issue 里偶尔讨论到的边界问题，但对于绝大多数生产场景，"启动时全库 GOT 一次性 patch + dlopen_hook 增量 patch" 已经够用。
