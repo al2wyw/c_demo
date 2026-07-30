@@ -336,3 +336,21 @@ sequenceDiagram
 | `InlineCacheBuffer` | 存放"过渡态"ICStub 的 StubQueue + 待释放 holder 的 pending 链；在 safepoint 里 `update_inline_caches()` 把 stub 写回 IC、`release_pending_icholders()` 删除 holder |
 
 **核心逻辑**：所有 unsafe 的多字段 patch 都被"外包"给 `InlineCacheBuffer` 里的 ICStub，用一次原子的 dest 改写把逻辑上的新状态"发布出去"，实际的机器码同步到下次 safepoint。`CompiledICHolder` 是当 cached_value 需要复合信息时的容器，同样受 safepoint 保护延迟回收——这就是 HotSpot 在不停顿 Java 线程的前提下安全演化 IC 状态的关键机制。
+
+___
+
+## patch 更新 i-cache
+
+```text
+CompiledIC::set_ic_destination -> NativeCall::set_destination_mt_safe -> ICache::invalidate_word -> _flush_icache_stub
+                               -> NativePltCall::set_destination_mt_safe(改Plt项)
+```
+
+mfence 不会去动本核的 L1I，在x86 规范里 IFU(指令获取器) 不参与常规的 D-cache 一致性协议，所以写进 L1D 的新指令不会更新到L1I，既本核的 L1I 里可能还缓存着旧指令。
+
+在自修改代码（Self-Modifying Code, SMC）和跨核代码 patch（Cross-Modifying Code, XMC，一个核修改代码，其他核运行代码）的场景下(如HotSpot中的IC patch、NativeCall patch、C1/C2 代码生成、deoptimize等)需要 clflush 指令去把包含 addr 的那条 cache line 从整个 cache 层次结构（所有核的 L1D、L2、L3，L1I）中失效掉。
+
+所以 x86 上刷 I-cache 的正确模板就是：mfence + clflush × N + mfence，一个都不能少。
+- 没有第一个 mfence：clflush 可能刷到 patch 前的旧数据。
+- 没有 clflush：L1I 里的旧指令永远不会被丢弃，mfence 再多次也没用。
+- 没有第二个 mfence：clflush 的效果可能还没生效，后续的 call 就已经把旧指令取进流水线了。
