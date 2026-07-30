@@ -456,6 +456,8 @@ reserved zone专为临界区代码（@ReservedStackAccess）设计，确保锁�
 shadow zone看起来像是浪费掉了(stack banging)，但是防止栈一下子溢出到java guarded zone外面，vm无法继续处理。(用容量换可靠性)
 StackShadowPages 默认值是根据"最深的一次 VM 调用链所需的栈大小"来设定的。
 
+所有的汇编代码都存储在CodeCache，各种CodeBlob在创建时会在CodeCache中分配内存，连各种Adapter和InterpreterCodelet、ICStub都使用BufferBlob来创建。
+
 C1编译入口:
 参考 C1编译器概述
 
@@ -469,3 +471,7 @@ jfr:
 
 jvmti:
 JvmtiExport::postxxxx进行callback函数调用
+
+bcp和bci的关系类似绝对地址和偏移量
+address bcp = constMethod()->code_base() + bci;
+Bytecodes::Code (*bcp) = Bytecodes::_ldc;
