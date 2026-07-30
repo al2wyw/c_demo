@@ -700,4 +700,6 @@ H --> I[后续 dlopen 加载新库时<br/>由 dlopen_hook 增量补丁]
 
 ## 为什么可以对GOT/PLT 表项"裸写"？
 
-`CodeCache::patchImport`这里不加原子/内存屏障是**"知其所以然的裸写"**：首先 GOT/PLT 表项被 ELF ABI 强制为 8B 自然对齐指针槽，而且x86_64/aarch64 都保证对齐 8B 写是 `single-copy atomic` —— 不会跨 cache line、也不会撕裂半写入。这里牺牲了可见性，是因为不需要对patch的结果立马生效，造成的影响只是少记录几次取样。
+`CodeCache::patchImport`这里不加原子/内存屏障是**"知其所以然的裸写"**：首先 GOT/PLT 表项被 ELF ABI 强制为 8B 自然对齐指针槽，而且x86_64/aarch64 都保证对齐的 8B 写是 `single-copy atomic`， 既不会跨 cache line、也不会撕裂半写入(torn write)。这里牺牲了可见性，是因为不需要对patch的结果立马生效，造成的影响只是少记录几次取样。
+
+对比字节码`TemplateTable::patch_bytecode`的裸写，由于目标字节码指令都是单字节，而单字节写都是原子的，同样牺牲了可见性。
