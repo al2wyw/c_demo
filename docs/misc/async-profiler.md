@@ -697,3 +697,7 @@ H --> I[后续 dlopen 加载新库时<br/>由 dlopen_hook 增量补丁]
 4. **窗口期**：JVM 从加载 profiler 库到 `Hooks::init(true)` 之间，如果有别的线程正在 `dlopen` 一个新库，理论上存在短暂的竞态；但 `_patched_libs` 的游标模型会在下一次 `patchLibraries` 时补上，所以最多"漏几个 malloc 事件"，不会永久错过。
 
 这些也是社区 issue 里偶尔讨论到的边界问题，但对于绝大多数生产场景，"启动时全库 GOT 一次性 patch + dlopen_hook 增量 patch" 已经够用。
+
+## 为什么可以对GOT/PLT 表项"裸写"？
+
+`CodeCache::patchImport`这里不加原子/内存屏障是**"知其所以然的裸写"**：首先 GOT/PLT 表项被 ELF ABI 强制为 8B 自然对齐指针槽，而且x86_64/aarch64 都保证对齐 8B 写是 `single-copy atomic` —— 不会跨 cache line、也不会撕裂半写入。这里牺牲了可见性，是因为不需要对patch的结果立马生效，造成的影响只是少记录几次取样。
