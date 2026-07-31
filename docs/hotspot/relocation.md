@@ -67,3 +67,15 @@ Relocation 信息以紧凑的流式格式存储，由 `RelocIterator` 负责遍�
 ```
 
 Relocation 记录的是**位置**（在机器码中的偏移），OopTable/MetadataTable 存储的是**值**（实际的对象/元数据指针）。两者配合，GC 才能既找到位置又能更新值。
+
+#### 与各种call type的关系
+
+```
+机器码中的指令
+0x00007fffe15926a7:callq  0x00007fffe8acf6c0   ← relocInfo 记录此处是 opt_virtual_call_type，addr=0x00007fffe15926a7，destination=0x00007fffe8acf6c0
+                                                          ↓
+                                                  pd_call_destination()
+                                                          ↓
+                                               根据addr获取代码中的destination
+```
+Relocation 记录的是**位置**（在机器码中的偏移），根据**位置**快速查出call的目标，Relocation类似于索引。
