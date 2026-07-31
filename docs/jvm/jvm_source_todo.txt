@@ -214,11 +214,25 @@ VirtualCallGenerator: get_resolve_virtual_call_stub
 增量更新解决原因1，原始快照(SATB)解决原因2 (都是通过写屏障来实现)
 
 全局内存初始化
+HotSpot内存管理的一个基本顺序：Reserve（保留地址） → Commit（提交物理内存） → Uncommit → Release
+
 ReservedSpace to reserve virtual address in advance:
 universe_init -> Universe::initialize_heap -> GenCollectedHeap::initialize -> GenCollectedHeap::allocate -> Universe::reserve_heap(return ReservedSpace)
 ReservedSpace::initialize(large is false, large page memory大页内存) -> os::reserve_memory -> mmap(PROT_NONE)
+
 VirtualSpace holds ReservedSpace to perform commit and pre-touch:
 DefNewGeneration::compute_new_size -> DefNewGeneration::expand -> VirtualSpace::expand_by -> os::commit_memory -> mmap(PROT_READ|PROT_WRITE)
+
+G1CollectedHeap::initialize()                           // g1CollectedHeap.cpp
+  └─ Universe::reserve_heap()                           // virtualspace.cpp
+    └─ ReservedSpace::initialize()                      // os::reserve_memory
+  └─ G1CollectedHeap::expand()
+      └─ HeapRegionManager::expand_by                   // heapRegionManager.cpp
+           └─ G1RegionToSpaceMapper::commit_regions
+                └─ G1PageBasedVirtualSpace::commit
+                     └─ os::commit_memory_or_exit       // os::commit_memory
+Reserve 一次性按 -Xmx 保留整个虚拟地址空间，Commit 按 Region 粒度多次调用，随堆扩容/收缩逐步增删
+
 
 类初始化内存分配
 ClassFileParser::parseClassFile ->  InstanceKlass::allocate_instance_klass (Allocate in meta)
