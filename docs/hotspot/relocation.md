@@ -22,13 +22,14 @@ Relocation（重定位信息）是 nmethod 中非常关键的一块区域，它�
 
 #### 存储结构
 
-Relocation 信息以紧凑的流式格式存储，由 `RelocIterator` 负责遍历解析，定义在 [relocInfo.hpp](/Users/liyang/IdeaProjects/jdk8u/hotspot/src/share/vm/code/relocInfo.hpp) 中：
+Relocation 信息以紧凑的流式格式存储，由 `RelocIterator` 负责遍历解析，定义在 [relocInfo.hpp](/jdk8u/hotspot/src/share/vm/code/relocInfo.hpp) 中：
 
 ```cpp
 // 每条 relocInfo 由两部分组成：
 // - type (4 bits)：重定位类型
 // - offset (12 bits)：相对上一条记录的 PC 偏移量（单位：字）
 // 如果偏移量超过 12 bits，则插入额外的 prefix 记录
+// 如果有data数据，则插入额外的 data (先由RelocationHolder来暂存此data，而Relocation只是rh的享元类(外壳)，共享rh的内存)
 ```
 
 #### 重定位类型（`relocInfo::relocType`）
