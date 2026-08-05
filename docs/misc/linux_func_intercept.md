@@ -528,4 +528,27 @@ flowchart TB
 | **性能** | 硬件单步 >> 软件单步；基本块单步 > 单指令单步 |
 | **权限** | 需要 `CAP_SYS_PTRACE` 或者是被跟踪进程的 owner，且受 `/proc/sys/kernel/yama/ptrace_scope` 限制 |
 
+## 软件单步优化
+
+**软件单步会不停冲刷或污染流水线的指令缓存组件：**
+1. **I-Cache（指令缓存）** —— L1iCache
+2. **uop Cache（微操作缓存，x86）** —— DSB/LSD
+3. **流水线中已 in-flight 的指令**
+4. **BTB（分支目标缓冲）/ BPU（分支预测器）**
+5. **TLB（如果跨页）**
+
+### 1. **批量 patch**（Displaced Stepping / Out-of-line Stepping）
+GDB 的 `displaced-stepping` 特性：把原指令**复制到一块 scratch pad 内存**执行，避免反复 patch 原代码。
+```
+原代码:  0x400000: mov %rax, %rbx   ← 只 patch 一次为 INT3
+Scratch: 0x500000: mov %rax, %rbx   ← 单独执行这里，不动原代码
+         0x500003: jmp 0x400003     ← 执行完跳回
+```
+避免了"patch → 恢复 → patch → 恢复"的循环。
+
+### 2. **硬件调试寄存器 (DR0-DR7)**
+x86 有 4 个硬件断点寄存器，不需要修改代码。GDB 的 `hbreak` 命令。
+- 优点：**零代码修改**，无 SMC nuke
+- 缺点：数量少（x86 只有 4 个），只能设置在指令边界
+
 ---
