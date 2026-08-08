@@ -552,3 +552,233 @@ x86 有 4 个硬件断点寄存器，不需要修改代码。GDB 的 `hbreak` �
 - 缺点：数量少（x86 只有 4 个），只能设置在指令边界
 
 ---
+
+# uprobes + eBPF 实现函数拦截的实现分析
+
+uprobes（User-space Probes）是 Linux 内核提供的用户态动态追踪机制。结合 eBPF，它可以实现零侵入、动态挂载、安全隔离的函数拦截。
+
+---
+
+## 一、uprobes 的核心思想
+
+uprobes 让你在**任意用户态进程的任意指令地址**放置一个断点，命中时进入内核态执行你注册的处理器（handler），然后**透明地**让原程序继续执行。
+
+```mermaid
+flowchart LR
+    A[目标进程执行到<br/>某函数入口] --> B[命中 uprobe<br/>INT3/BRK 陷入]
+    B --> C[内核 do_int3 处理]
+    C --> D[执行注册的 handler<br/>可以是 eBPF 程序]
+    D --> E[Single-step 原指令]
+    E --> F[返回用户态<br/>继续执行]
+```
+
+---
+
+## 二、内核实现的关键机制
+
+### 1. 注册流程
+
+内核侧（`kernel/events/uprobes.c`）会：
+
+1. **打开目标 ELF 文件**（`/proc/PID/exe` 或 `.so`）
+2. **inode + offset** 唯一定位一个 probe 点
+3. **在 `inode_uprobe_tree` 里插入 uprobe**
+
+### 2. 断点是如何植入代码的？—— Copy-on-Write 魔法
+
+这是 uprobes 最精妙的设计。**它不会直接修改磁盘上的 ELF 文件**（否则所有进程都会被影响），而是利用 Linux 的 **COW（Copy-On-Write）** 机制：
+
+```mermaid
+flowchart TB
+    D[install_breakpoint] --> E[write_opcode]
+    E --> F[对 mm_struct<br/>触发 COW break]
+    F --> G[进程 A 获得<br/>私有可写副本]
+    G --> H[写入 INT3]
+    H --> I[进程 A 独立看到<br/>INT3, 进程 B 不受影响]
+```
+
+关键代码路径：
+```
+uprobe_register()
+  → register_for_each_vma()
+    → install_breakpoint()
+      → set_swbp()
+        → uprobe_write_opcode()
+          → __replace_page()   ← 这里通过 COW 生成私有页
+```
+
+**这个设计非常聪明**：
+- 磁盘 ELF 保持完好
+- 每个进程独立看到 INT3（COW 后独立物理页）
+- 卸载 uprobe 时恢复原字节，再次触发 COW，最终页会与磁盘页合并（page merging）
+
+### 3. 陷入处理路径
+
+x86_64 陷入路径：
+```
+INT3 → do_int3() (arch/x86/kernel/traps.c)
+     → notify_die(DIE_INT3)
+     → uprobe_pre_sstep_notifier()
+       → handle_swbp()  (kernel/events/uprobes.c)
+         → 1. 找到对应的 uprobe
+         → 2. 调用所有 consumer 的 handler (bpf_prog_run)
+         → 3. 准备 single-step 执行源指令
+```
+
+### 4. single-step
+命中 handler 后，需要让被 INT3 覆盖的原指令继续执行。
+
+#### XOL（Execute Out-of-Line） Area —— 主流方式
+内核为每个进程在用户态地址空间分配一块 XOL vma（/proc/PID/maps 里能看到 [uprobes]）:
+
+每个 uprobe 命中时：
+1. 把原指令**复制**到 XOL 区一个 slot
+2. 修改用户态 PC 指向 XOL slot
+3. 设置 **TF 位（x86 硬件单步）** 或类似机制
+4. 执行完这条指令后再次陷入
+5. `handle_singlestep()` 把 PC 修正回 `orig_addr + insn_len`
+
+**这就是前面讨论的 GDB displaced stepping 在内核里的完整实现！**
+
+---
+
+## 三、eBPF 与 uprobes 的结合
+
+### UPROBE 挂载模型
+
+eBPF 程序通过 `BPF_PROG_TYPE_KPROBE`（uprobe 复用同一个类型）挂到 uprobe 的 consumer 链表上：
+
+```mermaid
+flowchart LR
+    A[eBPF 用户态程序<br/>libbpf/bcc] --> B[bpf syscall<br/>BPF_LINK_CREATE]
+    B --> C[bpf_uprobe_multi_link_attach<br/>或 perf_event_set_bpf_prog]
+    C --> D[注册到 uprobe 的<br/>consumer 链]
+    E[目标进程命中 uprobe] --> F[handle_swbp]
+    F --> G[遍历 consumer]
+    G --> H[bpf_prog_run<br/>执行 eBPF 字节码]
+    H --> I[eBPF 读取用户寄存器<br/>PT_REGS_PARM1 等]
+    I --> J[eBPF 写 map / 发 perf event]
+```
+
+---
+
+## 四、完整执行时序（以 uprobe on malloc 为例）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as 用户态 tracer<br/>(bpftrace)
+    participant Kern as 内核
+    participant Target as 目标进程
+    participant Malloc as libc.so:malloc
+
+    User->>Kern: bpf() 加载 eBPF
+    User->>Kern: perf_event_open(uprobe)
+    User->>Kern: PERF_EVENT_IOC_SET_BPF
+    Kern->>Kern: uprobe_register(inode, offset)
+    Kern->>Target: 找到映射了 libc 的 vma
+    Kern->>Target: install_breakpoint (COW + write INT3)
+    
+    Note over Target,Malloc: 一段时间后，目标进程调用 malloc
+    Target->>Malloc: call malloc
+    Malloc->>Kern: 命中 INT3 → do_int3
+    Kern->>Kern: handle_swbp
+    Kern->>Kern: bpf_prog_run(ebpf_prog, pt_regs)
+    Kern->>User: ringbuf 数据可读
+    Kern->>Kern: 复制原指令到 XOL slot
+    Kern->>Malloc: 修改 IP → XOL slot, 设 TF
+    Malloc->>Malloc: 执行 XOL 中的原指令
+    Malloc->>Kern: 单步陷入 → handle_singlestep
+    Kern->>Kern: 修正 IP = malloc + insn_len
+    Kern->>Malloc: 返回用户态, 继续 malloc
+    Malloc-->>Target: 正常返回
+```
+
+---
+
+## 五、性能开销来源
+
+每次 uprobe 命中的开销 ≈ **两次陷入 + eBPF 执行 + 内存拷贝**：
+
+| 阶段 | 大致开销 |
+|------|---------|
+| INT3 陷入用户→内核 | ~500 ns |
+| handle_swbp + eBPF 执行 | ~200-1000 ns（视程序复杂度） |
+| XOL 单步（复制指令 + 修改 IP） | ~200 ns |
+| 单步后陷入 | ~500 ns |
+| handle_singlestep + 修 PC | ~200 ns |
+| **单次总开销** | **~1.5 - 2.5 μs** |
+
+对比 async-profiler 的 signal handler + `frame.ret()`（用户态 SIGTRAP handler）：**大约相当**，但 uprobes 的可编程性和安全性远胜。
+
+---
+
+# uprobes + eBPF 在安全领域的函数拦截原理
+
+这是一个非常好的问题。uprobes + eBPF **可以观察**函数调用（读参数、读返回值、记录调用栈），但要说"**拦截/阻止**"函数继续执行、防止访问敏感数据，就需要额外的机制配合。
+
+---
+
+## 一、先厘清概念：观察 vs 拦截
+
+| 能力 | uprobes + eBPF 原生支持？ | 说明 |
+|------|--------------------------|------|
+| **观察**（读参数/返回值/栈） | ✅ 完全支持 | 通过 pt_regs、bpf_probe_read_user 等 |
+| **修改参数**（override 参数值） | ⚠️ 有限支持 | 需要写 pt_regs，早期内核不允许 |
+| **短路函数**（不执行原逻辑直接返回） | ✅ 通过 `bpf_override_return` | 需要 CONFIG_BPF_KPROBE_OVERRIDE，仅 error-injectable 函数 |
+| **发送信号杀进程** | ✅ 通过 `bpf_send_signal` | 5.3+ 内核 |
+| **修改用户态内存** | ✅ 通过 `bpf_probe_write_user` | 5.8+ 内核 |
+| **改变控制流跳到指定地址** | ✅ 通过修改 pt_regs->ip | 需要特殊配置 |
+
+**所谓"防止访问敏感数据"，用的是这几种能力的组合**，而不是单一的"拦截"操作。
+
+---
+
+## 二：**LSM eBPF** —— 生产级安全拦截
+
+自 Linux 5.7 引入的 **BPF LSM**（Linux Security Module）才是**真正为安全拦截设计**的机制，比 uprobes 更适合：
+
+**LSM eBPF 与 uprobes 的关键区别**：
+
+| 维度 | uprobes | BPF LSM |
+|------|---------|---------|
+| 挂载点 | 任意用户态函数 | 内核预定义的 200+ 安全 hook |
+| 拒绝方式 | 依赖 override_return / send_signal | **直接 return 非零错误码** |
+| 语义保证 | "尽力而为" | **强制生效**（LSM 规范保证） |
+| 绕过难度 | 应用可以直接系统调用绕过 libc | **系统调用必经内核 LSM 检查，无法绕过** |
+| 常见应用 | APM、诊断 | Falco、Tetragon、KubeArmor |
+
+---
+
+## 三、局限与真实边界
+
+**uprobe + eBPF 拦截的局限性**：
+
+### 1. TOCTOU（检查与使用间的时间窗口）
+如果 hook 在函数入口，读参数后原函数才执行。恶意程序**多线程共享内存**可以在检查后修改参数：
+
+```c
+// 攻击者的做法
+char* path = malloc(256);
+strcpy(path, "/tmp/safe.txt");  // 假装读安全文件
+open(path, ...);                 // hook 检查时是安全的
+// 另一个线程：strcpy(path, "/etc/shadow");
+// 若 hook 未同步阻塞，可能被绕过
+```
+
+**缓解**：把 hook 放在**内核系统调用入口**（tracepoint / LSM），此时内核已经把用户参数**拷贝进内核**，攻击者改用户态内存无效。
+
+### 2. libc 层拦截可被绕过
+如果只 hook libc 的 `open`，程序可以直接 `syscall(SYS_open, ...)` 绕过 libc：
+
+```c
+// 直接 syscall，libc 层的 uprobe 完全看不到
+long fd = syscall(SYS_openat, AT_FDCWD, "/etc/shadow", O_RDONLY);
+```
+
+**这就是为什么生产级安全产品都用 kprobe / tracepoint / LSM 而不是 uprobe** —— **所有路径最终都要走 syscall，在内核那一层拦截无法绕过**。
+
+### 3. verifier 限制
+eBPF 程序不能循环太多次、不能调用任意函数、栈只有 512 字节。**做复杂决策时能力有限**，通常需要"用户态做规则、eBPF 做匹配"的架构。
+
+---
