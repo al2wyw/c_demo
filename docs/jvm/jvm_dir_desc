@@ -15,9 +15,9 @@
 │          ├─adlc                       平台描述文件（上面的cpu或os_cpu里的*.ad文件）的编译器
 │          ├─asm                        汇编器接口
 │          ├─c1                         client编译器（又称“C1”）
-│          ├─ci                         动态编译器的公共服务/从动态编译器到VM的接口
+│          ├─ci                         动态编译器的公共服务/从动态编译器到VM的接口(JIT 与 VM 之间的抽象层)
 │          ├─classfile                  类文件的处理（包括类加载和系统符号表等）
-│          ├─code                       动态生成的代码的管理
+│          ├─code                       动态生成的代码的管理（CodeCache/nmethod）
 │          ├─compiler                   从VM调用动态编译器的接口
 │          ├─gc_implementation          GC的实现
 │          │  ├─concurrentMarkSweep      Concurrent Mark Sweep GC的实现
