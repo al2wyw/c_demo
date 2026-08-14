@@ -69,3 +69,39 @@ typedef struct _jmethodID *jmethodID;
 | 存在成员函数、构造/析构 | ❌ | ❌（C 无此概念） | ✅ | ✅ |
 | 空基类优化（EBO） | — | — | — | ✅ 常见 |
 
+___
+
+# `struct jvmtiEnv` 与 `class JvmtiEnv` 的关系
+
+> **`struct jvmtiEnv` 是暴露给 agent 的 C ABI 接口（函数表指针的"外壳"），`class JvmtiEnv` 是 HotSpot 内部的完整 C++ 实现。二者通过 `JvmtiEnvBase` 里内嵌的成员 `_jvmti_external` 拼在同一个对象里(POD 兼容布局)，同一份内存双向可换算。**
+
+## 总结对照表
+
+| 维度 | `struct jvmtiEnv` (C 侧)                  | `class JvmtiEnv` (C++ 侧)                                  |
+|------|------------------------------------------|-----------------------------------------------------------|
+| 定义位置 | `jvmti.h`（规范）                            | 由 `jvmtiHpp.xsl` 生成的 `jvmtiEnv.hpp`                       |
+| 类型语义 | C ABI 结构体，只是函数表指针，让任何语言的 agent 都能用 | C++ 类，继承自 `JvmtiEnvBase`，需要 class、继承、成员函数等特性              |
+| 数据成员 | 只有 `functions`（一个指针）                     | 无自身字段，业务字段全在 `JvmtiEnvBase`                               |
+| 谁看到 | JVMTI Agent（外部）                          | HotSpot 内部代码                                              |
+| 谁创建 | 不能独立创建                                   | `JvmtiEnv::create_a_jvmti(version)` 用 new 分配              |
+| 在内存中的位置 | 是 `JvmtiEnvBase::_jvmti_external` 成员     | 完整对象；`_jvmti_external` 只是它的一个成员                           |
+| 相互换算 | `(jvmtiEnv*)&jvmti_env->_jvmti_external` | `JvmtiEnvBase::JvmtiEnv_from_jvmti_env(env)`（`env` 减去偏移，container_of 换算） |
+| 类比 | `JNIEnv`（同款设计）                           | `JavaThread`（同款设计）                                        |
+
+**一句话再收束**：`struct jvmtiEnv` 是 `class JvmtiEnv` 挂在自己身上的**"C ABI 名片"**，agent 通过这张名片调用进来，HotSpot 立刻通过 `container_of` 式的偏移换算找回真正的 `class JvmtiEnv` 对象，然后走完整的 C++ 成员函数分派。二者是**同一对象的两个视图**，不是两个独立类型。
+
+___
+
+**把struct或class放在class的首位(POD标准布局)，可以利用内存地址(对象基址)重叠，此时指针可以互相转换**
+```cpp
+typedef struct A {
+    int i;
+} strA;
+typedef struct B {
+    strA a;
+    int j;
+} strB;
+strB* b;
+strA* a = (strA*) b;
+```
+
