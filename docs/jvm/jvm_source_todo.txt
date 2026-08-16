@@ -489,3 +489,5 @@ JvmtiExport::postxxxx进行callback函数调用
 bcp和bci的关系类似绝对地址和偏移量
 address bcp = constMethod()->code_base() + bci;
 Bytecodes::Code (*bcp) = Bytecodes::_ldc;
+
+理想图、C2编译过程(深入解析Java虚拟机覆盖的点比较多，但是都泛泛而谈、点到为止)
