@@ -339,7 +339,7 @@ sequenceDiagram
 
 ___
 
-# patch 更新 i-cache
+## patch 更新 i-cache
 
 ```text
 CompiledIC::set_ic_destination -> NativeCall::set_destination_mt_safe -> ICache::invalidate_word -> _flush_icache_stub
@@ -382,10 +382,85 @@ I-cache miss 触发 fetch 请求，通过 总线 广播到所有 L1 D-cache 做 
 | 维度 | x86                                         | AArch64 |
 |------|---------------------------------------------|---------|
 | L1 D-cache 策略 | write-back                                  | write-back |
-| L1 I-cache 是否 snoop D-cache | **✅ 硬件强制**                                  | ❌ 不 snoop |
+| I-cache 是否 snoop D-cache | **✅ 硬件强制**                                  | ❌ 不 snoop |
 | I-cache 是否参与 MESI/MOESI | ✅ 参与，可从 D-cache forward                     | ❌ 独立，从 PoU 取 |
 | 跨核 I-cache 一致性 | ✅ 硬件保证                                      | ❌ 软件负责（`IC IALLUIS`） |
-| 本核已 prefetch 的旧指令 | ⚠️ 需 serializing 指令                         | ⚠️ 需 `ISB` |
+| 跨核 D-cache 一致性 | MESI 硬件保证 | MOESI 硬件保证（相同） |
+| 本核已 prefetch 的旧指令 | ⚠️ 需 CPU串行化 指令                              | ⚠️ 需 `ISB` |
 | SMC 需要的软件操作 | 跨页 JMP / `CPUID` / `mprotect` 兜底(系统调用含IRET) | `DC CVAU` + `IC IVAU` + `ISB` |
+| async-profiler `_pad` 场景 | **啥也不用做** ✅ | **必须 `__builtin___clear_cache`** |
+
+**注意，async-profiler `_pad`  场景通过 `mprotect` 系统调用含IRET，**`IRET` 是 serializing instruction **，它会清空流水线，冲刷store buffer**
+
+- x86 CISC 哲学的典型体现：兼容性优先，宁可硬件复杂，也要软件简单。
+- ARM RISC 哲学的典型体现：效率优先，硬件极简，把复杂性外推给软件。
+
+## 线程迁移的完整路径（Linux x86_64）
+
+假设线程 T 从 CPU0 迁移到 CPU1，路径大致是：
+
+```
+[CPU0]                              [CPU1]
+1. T 运行中                          idle 或跑其他线程 T'
+2. 时钟中断/主动调用 schedule()      
+3. 进入内核态（syscall/interrupt）  
+   ├─ 硬件保存 SS/RSP/RFLAGS/CS/RIP  
+   └─ 触发 serializing 语义          
+4. schedule() 决定迁移
+5. try_to_wake_up() / migrate_task()  
+   ├─ 从 CPU0 的 runqueue 移除
+   ├─ 挂到 CPU1 的 runqueue
+   └─ 发 IPI (Inter-Processor Interrupt) 给 CPU1
+6. context_switch()
+   ├─ 保存 T 的寄存器到 task_struct
+   ├─ switch_mm()：MOV CR3（切换页表）★ serializing
+   └─ switch_to()：切栈，jmp
+7. IRET 返回用户态 ★ serializing
+   （但此时 T 已经不在 CPU0 上跑了）
+
+                                    8. CPU1 收到 IPI 或时钟中断
+                                    9. schedule() 挑到 T
+                                    10. context_switch()
+                                        ├─ 保存 T' 状态
+                                        ├─ 加载 T 的 task_struct
+                                        ├─ MOV CR3 ★ serializing
+                                        └─ 恢复 T 的寄存器
+                                    11. IRET 返回用户态 ★ serializing
+                                    12. T 在 CPU1 上继续执行
+```
+
+## Store Buffer 冲刷发生在哪一步？
+
+### 关键答案：**没有单独的"flush store buffer"指令，但 serializing 指令隐式冲刷**
+
+### 哪些指令是 serializing？
+
+- **特权指令**：`MOV CR0/CR3/CR4`、`WBINVD`、`INVD`、`LGDT`、`LIDT`、`LLDT`、`LTR`、`INVLPG`
+- **系统指令**：`IRET`、`RSM`
+- **通用指令**：`CPUID`
+- **同步指令**：`LOCK`-prefixed 指令（隐式 `MFENCE`）、`MFENCE` 本身
+
+### 迁移路径上必然出现的 serializing 指令
+
+在上面第 6 步 `switch_mm()` 里，如果新旧线程属于不同进程，会调用 `load_cr3()`：
+
+`MOV CR3` 是明确的 serializing 指令，**它会冲刷 store buffer**。
+
+即使是同进程内的线程切换（不换页表），路径上也一定有：
+- **进入内核态本身**：`INT`/`syscall` 涉及权限级切换，Intel 保证**特权级切换会 drain store buffer**（SDM §8.3 明确列出）
+- **`IRET`**：SDM §8.3 明确列为 serializing
+- **调度器里的原子操作**（`atomic_dec`、锁操作）：都带 `LOCK` 前缀，是隐式 `MFENCE`
+
+## D-Cache 数据怎么办？
+
+靠 MESI 协议 同步到新核
+
+## 架构对比
+
+| 场景 | x86 | ARM |
+|------|-----|-----|
+| Store buffer 冲刷 | 上下文切换的 serializing 指令隐式冲刷 | 需要 `DSB SY` 显式冲刷 |
+| TLB 一致性 | 软件负责（IPI + INVLPG） | 软件负责（`TLBI` + `DSB`）|
+| 线程迁移是否需要额外同步 | **不需要**，路径自带 | **不需要**，`switch_to` 内嵌 `DSB`/`ISB` |
 
 ---
