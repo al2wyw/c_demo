@@ -346,7 +346,7 @@ CompiledIC::set_ic_destination -> NativeCall::set_destination_mt_safe -> ICache:
                                -> NativePltCall::set_destination_mt_safe(改Plt项)
 ```
 
-在自修改代码（Self-Modifying Code, SMC）和跨核代码 patch（Cross-Modifying Code, XMC，一个核修改代码，其他核运行代码）的场景下(如HotSpot中的IC patch、NativeCall patch、C1/C2 代码生成、deoptimize等)的I-cache更新模版：
+在自修改代码（Self-Modifying Code, SMC）和跨核代码 patch（Cross-Modifying Code, XMC，交叉修改代码，一个核修改代码，其他核运行代码）的场景下(如HotSpot中的IC patch、NativeCall patch、C1/C2 代码生成、deoptimize等)的I-cache更新模版：
 
 `mfence` 的语义是：
 > "在 `mfence` 之前的所有 load 和 store，对**其他一致性观察者**（memory coherence agent）都完成了之后，才允许执行 `mfence` 之后的 load/store。"
@@ -373,3 +373,19 @@ mfence                    ; ③ 让 clflush 的失效效果对后续取指全局
 
 实现 x86 上刷新代码:
 生产方改代码 -> mfence(生产方) -> snoop跨核同步(硬件) -> cpu串行化(消费方) -> 消费方执行代码 (硬件层面保证所有核的L1D、L1I的一致性，无需额外`clflush [addr]`)
+
+snoop跨核同步:
+I-cache miss 触发 fetch 请求，通过 总线 广播到所有 L1 D-cache 做 snoop。任何一个核的 L1 D-cache 如果处于 Modified 状态持有该 line，会返回脏数据（cache-to-cache transfer，MESI 的 M→S 转换或 forwarding）
+
+## 架构对比表
+
+| 维度 | x86                                         | AArch64 |
+|------|---------------------------------------------|---------|
+| L1 D-cache 策略 | write-back                                  | write-back |
+| L1 I-cache 是否 snoop D-cache | **✅ 硬件强制**                                  | ❌ 不 snoop |
+| I-cache 是否参与 MESI/MOESI | ✅ 参与，可从 D-cache forward                     | ❌ 独立，从 PoU 取 |
+| 跨核 I-cache 一致性 | ✅ 硬件保证                                      | ❌ 软件负责（`IC IALLUIS`） |
+| 本核已 prefetch 的旧指令 | ⚠️ 需 serializing 指令                         | ⚠️ 需 `ISB` |
+| SMC 需要的软件操作 | 跨页 JMP / `CPUID` / `mprotect` 兜底(系统调用含IRET) | `DC CVAU` + `IC IVAU` + `ISB` |
+
+---
