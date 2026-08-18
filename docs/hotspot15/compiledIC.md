@@ -362,7 +362,7 @@ CompiledIC::set_ic_destination -> NativeCall::set_destination_mt_safe -> ICache:
 
 注意 **`clflush [addr]`是弱内存顺序指令，需要`mfence`保证顺序**
 
-所以 x86 上刷 I-cache 的正确模板就是：mfence + clflush × N + mfence。(保守实现跨内存顺序类型 / 跨微架构的鲁棒性)
+所以 x86 上刷 I-cache 的正确模板就是：mfence + clflush × N + mfence。(保守实现达到跨内存顺序类型 / 跨微架构兼容的鲁棒性)
 ```asm
 mfence                    ; ① 让 clflush 能看到之前所有 store 的最终结果
 flush_lines:
