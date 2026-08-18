@@ -339,18 +339,37 @@ sequenceDiagram
 
 ___
 
-## patch 更新 i-cache
+# patch 更新 i-cache
 
 ```text
 CompiledIC::set_ic_destination -> NativeCall::set_destination_mt_safe -> ICache::invalidate_word -> _flush_icache_stub
                                -> NativePltCall::set_destination_mt_safe(改Plt项)
 ```
 
-mfence 不会去动本核的 L1I，在x86 规范里 IFU(指令获取器) 不参与常规的 D-cache 一致性协议，所以写进 L1D 的新指令不会更新到L1I，既本核的 L1I 里可能还缓存着旧指令。
+在自修改代码（Self-Modifying Code, SMC）和跨核代码 patch（Cross-Modifying Code, XMC，一个核修改代码，其他核运行代码）的场景下(如HotSpot中的IC patch、NativeCall patch、C1/C2 代码生成、deoptimize等)的I-cache更新模版：
 
-在自修改代码（Self-Modifying Code, SMC）和跨核代码 patch（Cross-Modifying Code, XMC，一个核修改代码，其他核运行代码）的场景下(如HotSpot中的IC patch、NativeCall patch、C1/C2 代码生成、deoptimize等)需要 clflush 指令去把包含 addr 的那条 cache line 从整个 cache 层次结构（所有核的 L1D、L2、L3，L1I）中失效掉。
+`mfence` 的语义是：
+> "在 `mfence` 之前的所有 load 和 store，对**其他一致性观察者**（memory coherence agent）都完成了之后，才允许执行 `mfence` 之后的 load/store。"
 
-所以 x86 上刷 I-cache 的正确模板就是：mfence + clflush × N + mfence，一个都不能少。
-- 没有第一个 mfence：clflush 可能刷到 patch 前的旧数据。
-- 没有 clflush：L1I 里的旧指令永远不会被丢弃，mfence 再多次也没用。
-- 没有第二个 mfence：clflush 的效果可能还没生效，后续的 call 就已经把旧指令取进流水线了。
+`mfence` 保证的是**数据侧内存系统内部的顺序和可见性**：
+- store buffer 排空 → L1D
+- 通过 MESI 协议(snoop)让所有核的 L1D、L1I 失效/更新
+
+注意 **被前端流水线里的：预取缓冲区 / prefetch queue、DSB (Decoded Stream Buffer / uop cache)、分支预测器 BTB 等预取的指令需要通过**串行化指令 **（如 cpuid 或跨段 jmp/iret等）来清空**
+
+`clflush [addr]` 的作用是：
+> "把包含 `addr` 的那条 cache line 从**整个 cache 层次结构**（所有核的 L1D、L2、L3、L1I）中失效（invalidate），如果是脏的先写回内存。"
+
+注意 **`clflush [addr]`是弱内存顺序指令，需要`mfence`保证顺序**
+
+所以 x86 上刷 I-cache 的正确模板就是：mfence + clflush × N + mfence。(保守实现跨内存顺序类型 / 跨微架构的鲁棒性)
+```asm
+mfence                    ; ① 让 clflush 能看到之前所有 store 的最终结果
+flush_lines:
+    clflush [addr]        ; ② 把这条 line 从 L1D/L2/L3/L1I 全部踢掉
+    ...
+mfence                    ; ③ 让 clflush 的失效效果对后续取指全局可见
+```
+
+实现 x86 上刷新代码:
+生产方改代码 -> mfence(生产方) -> snoop跨核同步(硬件) -> cpu串行化(消费方) -> 消费方执行代码 (硬件层面保证所有核的L1D、L1I的一致性，无需额外`clflush [addr]`)
