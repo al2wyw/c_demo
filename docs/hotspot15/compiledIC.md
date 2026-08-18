@@ -355,7 +355,7 @@ CompiledIC::set_ic_destination -> NativeCall::set_destination_mt_safe -> ICache:
 - store buffer 排空 → L1D
 - 通过 MESI 协议(snoop)让所有核的 L1D、L1I 失效/更新
 
-注意 **被前端流水线里的：预取缓冲区 / prefetch queue、DSB (Decoded Stream Buffer / uop cache)、分支预测器 BTB 等预取的指令需要通过**串行化指令 **（如 cpuid 或跨段 jmp/iret等）来清空**
+注意 **被前端流水线里的：预取缓冲区 / prefetch queue、DSB (Decoded Stream Buffer / uop cache)、分支预测器 BTB 等预取的指令需要通过**串行化指令 **（如 cpuid 或跨段 jmp/iret等）来清空达到一致性**
 
 `clflush [addr]` 的作用是：
 > "把包含 `addr` 的那条 cache line 从**整个 cache 层次结构**（所有核的 L1D、L2、L3、L1I）中失效（invalidate），如果是脏的先写回内存。"
