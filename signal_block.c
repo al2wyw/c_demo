@@ -54,11 +54,11 @@ void signal_SIGFPE()
     exit(1);
 }
 
-void signal_SIGILL()
+void signal_SIGUSR1()
 {
     char timeStamp[32];
     get_format_time_ms(timeStamp);
-    fprintf(stdout, "%s caught SIGILL signal %lu\n", timeStamp, getThreadId());
+    fprintf(stdout, "%s caught SIGUSR1 signal %lu\n", timeStamp, getThreadId());
 }
 
 int test_signal_SIGFPE()
@@ -80,28 +80,29 @@ int test_signal_SIGFPE()
 }
 
 void *wait_func(void* args) {
-    int sig = *(int*)args;
+    int sig = SIGUSR1;
     printf("start to wait %d in few seconds %lu\n", sig, getThreadId());
     // 使用sigwait调用等待信号
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, sig);
-    sigwait(&set, &sig);//不停重复wait
-    printf("wait signal %d %lu\n", sig, getThreadId());//不会执行
+    int wait_ret = 0;
+    sigwait(&set, &wait_ret);
+    printf("wait signal %d %lu\n", wait_ret, getThreadId());
     return NULL;
 }
 
-int test_signal_SIGILL()
+int test_signal_SIGUSR1()
 {
-    int sig = SIGILL;
-    if (signal(sig, signal_SIGILL) == SIG_ERR) {
-        fprintf(stdout, "cannot handle SIGILL\n");
+    int sig = SIGUSR1;
+    if (signal(sig, signal_SIGUSR1) == SIG_ERR) {
+        fprintf(stdout, "cannot handle SIGUSR1\n");
     } else {
         fprintf(stdout, "xxxxx\n");
     }
 
     pthread_t thrd1;
-    if (pthread_create(&thrd1, NULL, wait_func, &sig) != 0)
+    if (pthread_create(&thrd1, NULL, wait_func, NULL) != 0)
     {
         printf("thread error:%s \n", strerror(errno));
         return 1;
@@ -115,12 +116,12 @@ void wait_signal()
     if (block) {
         sigset_t mask, old_mask;
         sigemptyset(&mask);
-        sigaddset(&mask, SIGILL);  // 添加 SIGILL 信号到掩码
+        sigaddset(&mask, SIGUSR1);  // 添加 SIGUSR1 信号到掩码
 
-        // 设置信号掩码，阻塞 SIGILL
+        // 设置信号掩码，阻塞 SIGUSR1
         pthread_sigmask(SIG_BLOCK, &mask, &old_mask);
 
-        printf("Thread: SIGILL is now blocked  %lu\n", getThreadId());
+        printf("Thread: SIGUSR1 is now blocked  %lu\n", getThreadId());
     }
     while (flag) {
         char timeStamp[32];
@@ -140,6 +141,6 @@ void main(int argc, char *argv[])
     block = (argc > 1) ? atoi(argv[1]) : 1;
 
     // test_signal_SIGFPE();
-    test_signal_SIGILL();
+    test_signal_SIGUSR1();
     wait_signal();
 }
