@@ -86,6 +86,7 @@ void *wait_func(void* args) {
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, sig);
+    // 这里有个竞态要处理：如果在sigwait调用之前就发出信号，那么会被信号handler抢跑，需要在创建线程前就让线程block信号(继承自父线程)，信号block后会被pending直到sigwait的调用(此时立即返回)
     int wait_ret = 0;
     sigwait(&set, &wait_ret);
     printf("wait signal %d %lu\n", wait_ret, getThreadId());

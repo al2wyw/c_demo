@@ -393,7 +393,7 @@ do_sigtimedwait(&these, &info, ts) {
 - ❌ **不构造 sigframe**
 - ❌ **不调用 signal_SIGILL handler**
 - ✅ 直接从内核返回 `sig=SIGILL` 给用户态
-- ✅ 你的代码 `printf("wait signal %d ...", sig, ...)` 会打印（注释里写"不会执行"是错误的，第一次会执行；除非你循环 `sigwait`）
+- ✅ 你的代码 `printf("wait signal %d ...", sig, ...)` 会打印
 
 ### 阶段 6：假设没有 sigwait（异步 handler 路径）
 
