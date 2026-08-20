@@ -337,10 +337,10 @@ static inline bool wants_signal(int sig, struct task_struct *p) {
 
 **对应到你的代码**：
 
-| 线程 | `blocked` 中含 SIGILL? | 是否被选中 |
-|------|----------------------|----------|
-| 主线程 | ✅ 是（你 `pthread_sigmask` 屏蔽了） | ❌ 跳过 |
-| wait_func 线程 | ❌ 否（`sigwait` 内部临时取消屏蔽来等待） | ✅ **选中** |
+| 线程 | `blocked` 中含 SIGILL?            | 是否被选中 |
+|------|---------------------------------|----------|
+| 主线程 | ✅ 是（你 `pthread_sigmask` 屏蔽了）    | ❌ 跳过 |
+| wait_func 线程 | ❌ 否（`sigwait` 内部额外临时取消对其的屏蔽来等待） | ✅ **选中** |
 
 > 🎯 这就是为什么你的代码能精准命中 wait_func 线程的根本原因。
 
@@ -351,6 +351,8 @@ found:
     signal_wake_up(t, sig == SIGKILL);
         ↓
     set_tsk_thread_flag(t, TIF_SIGPENDING);  // 设置标志位
+        ↓
+    signal_wake_up_state(t, state);
         ↓
     if (t 在睡眠) wake_up_state(t, TASK_INTERRUPTIBLE); //唤醒目标线程进行resched处理信号
     else kick_process           // 发送IPI到目标cpu催促进入内核态处理信号
@@ -370,22 +372,26 @@ graph LR
     D -->|是| E[arch_do_signal_or_restart]
     D -->|否| F[直接返回用户态]
     E --> G[get_signal: 取出待处理信号]
-    G --> H{是 sigwait 等待?}
-    H -->|是| I[唤醒 sigwait 返回信号编号]
-    H -->|否| J[setup_rt_frame: 构造信号栈帧]
+    G --> J[setup_rt_frame: 构造信号栈帧]
 ```
 
 ### 阶段 5：sigwait 路径（你的实际场景）⭐
 
-因为 wait_func 线程调用了 `sigwait()`，走的是**同步等待路径**，**不走异步 handler**：
+因为 wait_func 线程调用了 `sigwait()`，线程睡在内核态，走的是**同步等待路径**，**由信号投递方signal_wake_up_state唤醒**：
 
 ```c
 // glibc sigwait → 内核 do_sigtimedwait
 do_sigtimedwait(&these, &info, ts) {
     spin_lock_irq(&tsk->sighand->siglock);
-    sig = dequeue_signal(tsk, &mask, &info, &type);  // 直接取出
+    sig = dequeue_signal(tsk, &mask, &info, &type);  // 直接取出，注意mask是these取反
+    sigandsets(&tsk->blocked, &tsk->blocked, &mask); // and操作清空目标sig，即不block我们想wait的sig
     spin_unlock_irq(&tsk->sighand->siglock);
-    // 把信号编号填回用户态变量
+    
+    __set_current_state(TASK_INTERRUPTIBLE|TASK_FREEZABLE);
+    ret = schedule_hrtimeout_range(to, tsk->timer_slack_ns,
+                                   HRTIMER_MODE_REL);   // 睡眠
+    ...
+    sig = dequeue_signal(&mask, info, &type);       // 第二次尝试
 }
 ```
 
@@ -441,7 +447,7 @@ signal(SIGILL, signal_SIGILL);  // 设置的是 sighand_struct，整个进程共
 - 该线程的 `task_struct->blocked` 屏蔽字
 - 是否在 `sigwait/sigtimedwait/sigsuspend` 中
 
-### 5.2 `sigwait` 比 handler 优先级更高
+### 5.2 `sigwait` 比 handler 优先级更高 (前提是要向目标线程发送SIGILL)
 
 当一个线程在 `sigwait` 等待 SIGILL 时：
 - 即使该线程没屏蔽 SIGILL
