@@ -11,7 +11,7 @@
 
 ### 1.1 `struct eventpoll` — epoll 实例本体
 
-存储于 epoll fd 的 `file->private_data`，见 [fs/eventpoll.c:236-289](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)：
+存储于 epoll fd 的 `file->private_data`，见 [fs/eventpoll.c:236-289](/linux/fs/eventpoll.c)：
 
 | 字段 | 用途 | 保护锁 |
 |---|---|---|
@@ -26,7 +26,7 @@
 
 ### 1.2 `struct epitem` — 每个被监听的 fd 对应一个
 
-见 [fs/eventpoll.c:203-234](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)：
+见 [fs/eventpoll.c:203-234](/linux/fs/eventpoll.c)：
 
 ```
 rbn           - 红黑树节点（在 ep->rbr 中）
@@ -41,7 +41,7 @@ event         - 用户注册的 epoll_event（含 EPOLLET/EPOLLONESHOT 等）
 
 ### 1.3 `struct eppoll_entry` — 挂到被监听文件等待队列的"钩子"
 
-见 [fs/eventpoll.c:190-201](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)：
+见 [fs/eventpoll.c:190-201](/linux/fs/eventpoll.c)：
 
 ```
 wait   - 挂到 target 文件 wait_queue 的节点，回调函数是 ep_poll_callback
@@ -82,7 +82,7 @@ flowchart LR
 
 ### 2.1 `epoll_ctl(EPOLL_CTL_ADD)` — `ep_insert`
 
-见 [fs/eventpoll.c:1682-1755](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)：
+见 [fs/eventpoll.c:1682-1755](/linux/fs/eventpoll.c)：
 
 ```mermaid
 flowchart TD
@@ -101,7 +101,7 @@ flowchart TD
 
 ### 2.2 `ep_poll_callback` — 事件汇聚点
 
-见 [fs/eventpoll.c:1372-1462](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)。这是**中断/软中断上下文**执行的核心：
+见 [fs/eventpoll.c:1372-1462](/linux/fs/eventpoll.c)。这是**中断/软中断上下文**执行的核心：
 
 ```mermaid
 flowchart TD
@@ -126,7 +126,7 @@ flowchart TD
 
 ### 2.3 `epoll_wait` → `ep_poll` → `ep_send_events`
 
-见 [fs/eventpoll.c:2013-2114](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)：
+见 [fs/eventpoll.c:2013-2114](/linux/fs/eventpoll.c)：
 
 ```mermaid
 flowchart TD
@@ -145,7 +145,7 @@ flowchart TD
     I --> J["被 ep_poll_callback 唤醒<br/>回到循环顶部"]
 ```
 
-`ep_send_events` 是**真正搬运事件到用户态**的地方（[fs/eventpoll.c:1902-1948](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)），也是 **ET/LT 差异的分水岭**——见第三节。
+`ep_send_events` 是**真正搬运事件到用户态**的地方（[fs/eventpoll.c:1902-1948](/linux/fs/eventpoll.c)），也是 **ET/LT 差异的分水岭**——见第三节。
 
 ---
 
@@ -161,7 +161,7 @@ epoll 内部维护**两条**"就绪信息"链表，靠 `ep->ovflist` 的三态�
 
 ### 3.1 扫描进入 `ep_start_scan`
 
-见 [fs/eventpoll.c:855-874](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)：
+见 [fs/eventpoll.c:855-874](/linux/fs/eventpoll.c)：
 
 ```c
 spin_lock_irq(&ep->lock);
@@ -174,7 +174,7 @@ spin_unlock_irq(&ep->lock);
 
 ### 3.2 扫描退出 `ep_done_scan`
 
-见 [fs/eventpoll.c:876-914](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)：
+见 [fs/eventpoll.c:876-914](/linux/fs/eventpoll.c)：
 
 ```c
 // 1) 把扫描期间 ovflist 收集到的新事件搬回 rdllist（LIFO→FIFO 头插反转顺序）
@@ -194,7 +194,7 @@ list_splice(scan_batch, &ep->rdllist);  // 本次未消费/LT 回插的项拼回
 
 > **整个 epoll 里 ET/LT 的行为差异只体现在一处代码：`ep_deliver_event` 结尾**。
 
-见 [fs/eventpoll.c:1857-1900](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)：
+见 [fs/eventpoll.c:1857-1900](/linux/fs/eventpoll.c)：
 
 ```c
 static int ep_deliver_event(struct eventpoll *ep, struct epitem *epi,
@@ -295,7 +295,7 @@ sequenceDiagram
 
 ### 4.5 `EPOLLONESHOT` 的位置
 
-在 ET/LT 判断之**前**（[fs/eventpoll.c:1890](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)）：
+在 ET/LT 判断之**前**（[fs/eventpoll.c:1890](/linux/fs/eventpoll.c)）：
 
 ```c
 if (epi->event.events & EPOLLONESHOT) {
@@ -303,7 +303,7 @@ if (epi->event.events & EPOLLONESHOT) {
 }
 ```
 
-清零监听位后，`ep_poll_callback` 里的这一行判断（[fs/eventpoll.c:1387-1388](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)）：
+清零监听位后，`ep_poll_callback` 里的这一行判断（[fs/eventpoll.c:1387-1388](/linux/fs/eventpoll.c)）：
 
 ```c
 if (!(epi->event.events & ~EP_PRIVATE_BITS))
@@ -333,7 +333,7 @@ if (pollflags && !(pollflags & epi->event.events))
 
 ### 6.1 注册端 `ep_ptable_queue_proc`
 
-见 [fs/eventpoll.c:1489-1492](/Users/liyang/IdeaProjects/linux/fs/eventpoll.c)：
+见 [fs/eventpoll.c:1489-1492](/linux/fs/eventpoll.c)：
 
 ```c
 if (epi->event.events & EPOLLEXCLUSIVE)
