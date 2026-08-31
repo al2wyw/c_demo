@@ -3,7 +3,7 @@
 **JVMCI 加载 Graal**：HotSpot 在启动后期通过 `JVMCI::initialize_compiler` → `JVMCIRuntime::call_getCompiler`,借助 `JavaCalls`（传统模式）或 JNI（libgraal 模式）调用 Java 类 `HotSpotJVMCIRuntime.runtime() / getCompiler()`, 后者用 `ServiceLoader` 找到 `HotSpotGraalCompilerFactory` 并实例化 Graal。
 
 **Graal 自身怎么变成机器码**：
-- **传统模式**：作为普通 Java 类,由 HotSpot 的解释器 + **C1** 编译（在 [jvmciCompiler.cpp](/jdk15/src/hotspot/share/jvmci/jvmciCompiler.cpp) 的 `force_comp_at_level_simple` 强制不让 Graal 编译自己）。
+- **传统模式**：作为普通 Java 类,由 HotSpot 的解释器 + **C1** 编译（在 [jvmciCompiler.cpp](/jdk15/src/hotspot/share/jvmci/jvmciCompiler.cpp) 的 `force_comp_at_level_simple` 强制不让 Graal 编译自己，避免大量Graal代码触发level 4编译所造成的性能挤兑(Graal 编译自己不会出现死循环)）。
 - **libgraal 模式**：**在 JDK 构建阶段就用 Substrate VM Native Image 预先 AOT 编译**成 `libjvmcicompiler.so`,并连带一个精简的 GC/线程运行时，运行时通过 `os::dll_load` + `JNI_CreateJavaVM` 创建一个SVM实例并加载到 HotSpot 进程里, SVM和 HotSpot 通过 JNI 通信。
 
 
