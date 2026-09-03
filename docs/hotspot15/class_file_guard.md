@@ -111,6 +111,25 @@
 
 ___
 
+# 类加载过程
+
+```text
+Class.forName()
+    └─ JVM 内部 通过JavaCalls 调用 ClassLoader.loadClass ← SystemDictionary::load_instance_class
+        └─ 自定义 ClassLoader.findClass()      ← 这是类加载过程中可自由定制的部分
+            └─ 从磁盘/网络读出【加密字节】
+                 └─ 调用 defineClass(加密字节)   ← 这是 native 方法
+                      └─ JVM 内部：触发 ClassFileLoadHook ← KlassFactory::create_from_stream
+                           └─ 调用第三方 agent 的 transformer【在这里解密】
+                                └─ 返回【解密字节】
+                      └─ JVM 用解密字节真正定义类
+                 └─ defineClass 返回的是 Class 对象，不是字节
+```
+
+**所以java层通过ClassLoader无法获取底层jvm解密后的字节**
+
+___
+
 [任务规划完成]
 # 加密 Class + 解密加载：这才是 Class 保护的真实战场
 
