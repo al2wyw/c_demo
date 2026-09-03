@@ -20,6 +20,13 @@ struct myStruct3 {
     struct myStruct t;
 };
 
+struct emptyArray {
+    int i;
+    int j;
+    int arr[0];
+    int k;
+};
+
 void func_size() {
     struct myStruct t;
     printf("size! %ld, %p, %p, %p, %p\n", sizeof(t), &t.i, &t.c, &t.d, &t.j);
@@ -27,6 +34,9 @@ void func_size() {
     printf("size! %ld, %p, %p\n", sizeof(t2), &t2.w, &t2.c);
     struct myStruct3 t3;
     printf("size! %ld, %p, %p, %p\n", sizeof(t3), &t3.w, &t3.w[1], &t3.t);
+
+    struct emptyArray emp;
+    printf("size! %ld, %p, %p, %p, %p, %p\n", sizeof(emp), &emp.i, &emp.j, &emp.arr, emp.arr, &emp.k);// &emp.arr == emp.arr no matter arr[1] or arr[0] !!!
 }
 
 int main() {
