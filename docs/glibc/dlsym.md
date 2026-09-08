@@ -142,5 +142,39 @@ flowchart TD
     L --> M
     H -->|未命中| N[返回 NULL]
 ```
+---
+
+## 六、l_scope和l_local_scope的构建过程
+
+```mermaid
+flowchart LR
+    subgraph 加载期 ["加载期 - 从 ELF 构建 scope"]
+      A1[.dynamic 段] --> A2[DT_NEEDED 列表]
+      A1 --> A3[DT_RPATH/RUNPATH]
+      A1 --> A4[DT_FLAGS_1 DF_1_GLOBAL]
+      A2 -->|_dl_map_object_deps| B1[l_searchlist<br/>依赖闭包]
+      A3 -->|搜索路径| B1
+      B1 --> C1["l_local_scope[0]"]
+      B1 --> C2[l_scope 第 0 层]
+      A4 -->|dlopen 或 DSO 声明| D1["其他 map 的 l_scope 追加此对象<br/>(update_scopes)"]
+    end
+    subgraph 查找期 ["查找期 - do_sym / _dl_lookup_symbol_x"]
+      C1 -->|遍历| E1[每个 link_map]
+      C2 -->|遍历| E1
+      D1 -->|遍历| E1
+      E1 --> F1[.gnu.hash / .hash]
+      F1 --> F2[.dynsym]
+      F2 --> F3[.dynstr strcmp]
+      F3 --> F4[.gnu.version + .gnu.version_d/r]
+      F4 --> G[命中的 ElfW Sym]
+    end
+```
+
+---
+
+## 七、总结
+
+> - **`l_local_scope`**：仅一层，就是 `l_searchlist`，即根据该 DSO `.dynamic` 中 **`DT_NEEDED`（配合 `DT_RPATH/RUNPATH/DT_STRTAB`）** 递归展开的依赖闭包，用于 `dlopen` 出来的 handle 或 `RTLD_NEXT` 场景，把符号查找限制在"这个模块的家门内"。
+> - **`l_scope`**：多层数组，第 0 层是主程序的 `l_searchlist`，后续层由 `RTLD_GLOBAL` 加载或 `.dynamic` 中 **`DT_FLAGS_1` 带 `DF_1_GLOBAL`** 的对象追加进来，用于 `RTLD_DEFAULT` 和常规重定位的"全局符号池"查找。
 
 ---
