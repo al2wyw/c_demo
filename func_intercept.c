@@ -18,7 +18,7 @@
  *    LD_PRELOAD=./libfin.so ./program
  *
  * 符号查找:
- *  dlsym 查找的是**动态链接符号表**，即`.dynsym` 段
+ *  dlsym 查找的是**动态链接符号表**，即`.dynsym` 段，参考dlsym.md
  * `nm libjvm.dylib` 查找的是**完整符号表**， 即`.symtab` 和 `.dynsym` 段
  * `nm -D libjvm.dylib` 和 dlsym 一致
  *  注意 nm 的结果中类型为大写一般为global(external导出)，小写一般为local
