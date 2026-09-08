@@ -20,7 +20,7 @@
  * 符号查找:
  *  dlsym 查找的是**动态链接符号表**，即`.dynsym` 段
  * `nm libjvm.dylib` 查找的是**完整符号表**， 即`.symtab` 和 `.dynsym` 段
- * `nm -g libjvm.dylib` 和 dlsym 一致
+ * `nm -D libjvm.dylib` 和 dlsym 一致
  *  **MachO格式的符号会在ELF格式的符号加前缀"_"**
  */
 #include <stdio.h>
