@@ -21,7 +21,9 @@
  *  dlsym 查找的是**动态链接符号表**，即`.dynsym` 段
  * `nm libjvm.dylib` 查找的是**完整符号表**， 即`.symtab` 和 `.dynsym` 段
  * `nm -D libjvm.dylib` 和 dlsym 一致
+ *  注意 nm 的结果中类型为大写一般为global(external导出)，小写一般为local
  *  **MachO格式的符号会在ELF格式的符号加前缀"_"**
+ *  dlopen + dlsym 可以在符号有冲突时使用，避免DT_NEEDED常规加载报错，但要注意c++的mangled name
  */
 #include <stdio.h>
 #include <stdlib.h>
